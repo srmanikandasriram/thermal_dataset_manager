@@ -1,0 +1,23 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# local dataset storage root (default dev location; also a dev symlink to an
+# external drive). Any stray root created by running a CLI from another CWD.
+/datasets
+/backend/datasets/
+
+# derived SQLite catalog -- never a source of truth, always rebuildable
+catalog.sqlite
+catalog.sqlite-*
+
+# frontend
+frontend/node_modules/
+frontend/dist/
+
+.env
