@@ -4,6 +4,33 @@ function formatKeyLabel(key: KeyInfo): string {
   return `${key.key}  (${key.shape.join('×')}, ${key.dtype})`
 }
 
+const TELEMETRY_OPTIONS: { value: number; label: string }[] = [
+  { value: 2, label: 'Top 2 rows' },
+  { value: 0, label: 'None' },
+  { value: -2, label: 'Bottom 2 rows' },
+]
+
+export const DEFAULT_TELEMETRY_ROW_COUNT = 2
+
+/** Per-camera telemetry-row selector. Signed: +N top rows, -N bottom rows, 0 none. */
+export function TelemetryRowsSelect({
+  value,
+  onChange,
+}: {
+  value: number | null | undefined
+  onChange: (value: number) => void
+}) {
+  return (
+    <select value={value ?? DEFAULT_TELEMETRY_ROW_COUNT} onChange={(e) => onChange(Number(e.target.value))}>
+      {TELEMETRY_OPTIONS.map((opt) => (
+        <option key={opt.value} value={opt.value}>
+          {opt.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
 export function KeyMappingEditor({
   keys,
   mapping,
@@ -22,7 +49,10 @@ export function KeyMappingEditor({
   }
 
   function addRow() {
-    onChange([...mapping, { camera_label: null, frames_key: '', timestamps_key: '' }])
+    onChange([
+      ...mapping,
+      { camera_label: null, frames_key: '', timestamps_key: '', telemetry_row_count: DEFAULT_TELEMETRY_ROW_COUNT },
+    ])
   }
 
   function moveRow(index: number, direction: -1 | 1) {
@@ -48,6 +78,7 @@ export function KeyMappingEditor({
             <th>Camera label</th>
             <th>Frames key</th>
             <th>Timestamps key</th>
+            <th>Telemetry rows</th>
             <th />
           </tr>
         </thead>
@@ -106,6 +137,12 @@ export function KeyMappingEditor({
                     </option>
                   ))}
                 </select>
+              </td>
+              <td>
+                <TelemetryRowsSelect
+                  value={row.telemetry_row_count}
+                  onChange={(v) => updateRow(i, { telemetry_row_count: v })}
+                />
               </td>
               <td>
                 <button type="button" className="icon-button" onClick={() => removeRow(i)} aria-label="Remove camera">

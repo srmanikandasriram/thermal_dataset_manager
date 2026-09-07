@@ -116,6 +116,9 @@ export interface CameraMapping {
   camera_label: string | null
   frames_key: string
   timestamps_key: string
+  // Signed telemetry-row count: positive N = top N rows are telemetry,
+  // negative N = bottom |N| rows, 0 = none.
+  telemetry_row_count: number
 }
 
 export interface UploadInspectionResponse {

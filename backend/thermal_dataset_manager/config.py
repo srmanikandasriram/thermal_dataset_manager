@@ -20,8 +20,9 @@ class Settings(BaseSettings):
     # Target uncompressed bytes per zarr chunk along the time axis.
     zarr_target_chunk_bytes: int = 24 * 1024 * 1024
 
-    # Default number of telemetry rows prepended to each raw frame if the
-    # source file does not specify one explicitly.
+    # Default telemetry-row count per frame when the ingest request doesn't
+    # set one per camera. Signed: 2 = top 2 rows are telemetry, 0 = none,
+    # -2 = bottom 2 rows are telemetry.
     default_telemetry_row_count: int = 2
 
     # Number of frames sampled (evenly spaced) when computing count

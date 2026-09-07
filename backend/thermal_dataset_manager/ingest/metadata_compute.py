@@ -5,7 +5,7 @@ from typing import Protocol
 
 import numpy as np
 
-from thermal_dataset_manager.ingest.types import NormalizedCapture
+from thermal_dataset_manager.ingest.types import NormalizedCapture, image_height, image_row_slice
 from thermal_dataset_manager.models.metadata import (
     AutoMetadata,
     CameraStreamMetadata,
@@ -46,7 +46,7 @@ def _sampled_count_stats(
     if n_frames == 0:
         return 0, 0, 0.0, 0.0, 0.0, 1.0
     indices = np.linspace(0, n_frames - 1, num=min(sample_frames, n_frames), dtype=int)
-    image = np.asarray(frames[indices, telemetry_row_count:, :])
+    image = np.asarray(frames[indices, image_row_slice(telemetry_row_count), :])
     vmin, vmax = np.percentile(image, [2, 98])
     if vmax <= vmin:
         vmax = vmin + 1
@@ -109,7 +109,7 @@ def compute_camera_metadata(
         camera_index=camera_index,
         camera_label=camera_label,
         frame_count=n_frames,
-        frame_height=h_total - telemetry_row_count,
+        frame_height=image_height(h_total, telemetry_row_count),
         frame_width=w,
         telemetry_row_count=telemetry_row_count,
         fps_estimate=fps_estimate,

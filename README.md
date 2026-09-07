@@ -42,7 +42,16 @@ Without any server running:
 ```bash
 source .venv/bin/activate
 python backend/scripts/ingest_cli.py path/to/capture.npz [more_captures...]
+
+# a capture with no telemetry rows (applies to every camera in every file this run)
+python backend/scripts/ingest_cli.py --telemetry-rows 0 path/to/capture.npz
 ```
+
+Each raw frame may carry non-image **telemetry rows**. `--telemetry-rows` (CLI) and a per-camera
+selector in the ingest UI's key mapping control which rows those are: `2` (default) = the top 2
+rows, `0` = none, `-2` = the bottom 2 rows. The default is `THERMAL_DEFAULT_TELEMETRY_ROW_COUNT`.
+Telemetry rows are kept verbatim in the stored Zarr; they're only sliced off for stats and
+preview rendering, and excluded from the reported `frame_height`.
 
 Each source file's arrays are matched by name against the registry in
 `backend/thermal_dataset_manager/ingest/key_registry.py` (currently `raw_thr_frames`/

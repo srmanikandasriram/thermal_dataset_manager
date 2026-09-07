@@ -65,12 +65,23 @@ def build_camera_capture(
 def build_normalized_capture_from_pairs(
     array_map: Mapping[str, np.ndarray],
     pairs: list[CameraKeyPair],
-    telemetry_row_count: int,
+    default_telemetry_row_count: int,
 ) -> NormalizedCapture:
+    """Each pair's own `telemetry_row_count` wins; pairs that leave it unset
+    (e.g. everything from auto-detection) fall back to the default."""
     used_keys = {pair.frames_key for pair in pairs} | {pair.timestamps_key for pair in pairs}
     extra_arrays = {key: np.asarray(value) for key, value in array_map.items() if key not in used_keys}
     return NormalizedCapture(
-        cameras=[build_camera_capture(array_map, pair, telemetry_row_count) for pair in pairs],
+        cameras=[
+            build_camera_capture(
+                array_map,
+                pair,
+                pair.telemetry_row_count
+                if pair.telemetry_row_count is not None
+                else default_telemetry_row_count,
+            )
+            for pair in pairs
+        ],
         extra_arrays=extra_arrays,
     )
 

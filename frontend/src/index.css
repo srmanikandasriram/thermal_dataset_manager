@@ -581,6 +581,29 @@ dd {
   color: var(--text);
 }
 
+.telemetry-rows-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.telemetry-rows-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  max-width: 22rem;
+}
+
+.telemetry-rows-list select {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.4rem;
+}
+
 .icon-button {
   background: none;
   border: none;

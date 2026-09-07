@@ -117,6 +117,34 @@ def test_confirm_with_auto_mapping_ingests_successfully(client, tmp_path):
     assert body["auto"]["cameras"][0]["counts_min"] is not None
 
 
+def test_confirm_respects_per_camera_telemetry_row_count(client, tmp_path):
+    src = tmp_path / "capture.npz"
+    write_single_camera_npz(src, n_frames=6)
+
+    with open(src, "rb") as f:
+        upload_resp = client.post("/api/ingest/upload", files={"file": ("capture.npz", f, "application/octet-stream")})
+    inspection = upload_resp.json()
+    # Auto-mapping carries the server default so the UI can show it.
+    assert inspection["auto_mapping"][0]["telemetry_row_count"] == 2
+
+    mapping = [{**inspection["auto_mapping"][0], "telemetry_row_count": 0}]
+    confirm_resp = client.post(
+        "/api/ingest/confirm",
+        json={
+            "upload_token": inspection["upload_token"],
+            "filename": inspection["filename"],
+            "mapping": mapping,
+        },
+    )
+    job = _poll_job(client, confirm_resp.json()["job_id"])
+    assert job["status"] == "succeeded"
+
+    body = client.get(f"/api/datasets/{job['dataset_id']}").json()
+    cam = body["auto"]["cameras"][0]
+    assert cam["telemetry_row_count"] == 0
+    assert cam["frame_height"] == 12  # conftest frames are 12 rows total
+
+
 def test_confirm_with_manual_mapping_for_unrecognized_keys(client, tmp_path):
     src = tmp_path / "weird.npz"
     frames = np.random.default_rng(0).integers(0, 60000, size=(7, 12, 16), dtype=np.uint16)

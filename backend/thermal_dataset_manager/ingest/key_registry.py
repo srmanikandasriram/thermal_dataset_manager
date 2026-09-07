@@ -44,6 +44,9 @@ class CameraKeyPair:
     camera_label: str | None
     frames_key: str
     timestamps_key: str
+    # None -> caller substitutes the configured default. Signed: positive
+    # rows at the top are telemetry, negative rows at the bottom, 0 none.
+    telemetry_row_count: int | None = None
 
 
 class KeyRegistryError(ValueError):

@@ -16,6 +16,8 @@ class CameraStreamMetadata(BaseModel):
     frame_count: int
     frame_height: int  # image rows only, excludes telemetry rows
     frame_width: int
+    # Signed: positive N = top N rows are telemetry, negative N = bottom
+    # |N| rows, 0 = no telemetry rows.
     telemetry_row_count: int
     dtype: str = "uint16"
 

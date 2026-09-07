@@ -7,6 +7,7 @@ Layout (one group per dataset, one subgroup per camera stream, plus an
         .zattrs: {schema_version, source_format, camera_count}
         camera_<n>/
             counts      (n_frames, H, W) uint16   -- includes telemetry rows
+                                                     (top or bottom; see telemetry_row_count)
             timestamps  (n_frames,) float64
             .zattrs: {telemetry_row_count, frame_height, frame_width,
                       camera_index, camera_label, timestamp_kind}
@@ -23,7 +24,11 @@ import numcodecs
 import numpy as np
 import zarr
 
-from thermal_dataset_manager.ingest.types import NormalizedCameraCapture
+from thermal_dataset_manager.ingest.types import (
+    NormalizedCameraCapture,
+    image_height,
+    image_row_slice,
+)
 
 SCHEMA_VERSION = 1
 _EXTRA_GROUP = "extra"
@@ -59,7 +64,7 @@ def write(
         cam_group.attrs["camera_index"] = cam.camera_index
         cam_group.attrs["camera_label"] = cam.camera_label
         cam_group.attrs["telemetry_row_count"] = cam.telemetry_row_count
-        cam_group.attrs["frame_height"] = h_total - cam.telemetry_row_count
+        cam_group.attrs["frame_height"] = image_height(h_total, cam.telemetry_row_count)
         cam_group.attrs["frame_width"] = w
         cam_group.attrs["timestamp_kind"] = cam.timestamp_kind
 
@@ -113,7 +118,7 @@ def read_frame_image(store_path: Path, camera_index: int, frame_index: int) -> n
     cam_group = root[f"camera_{camera_index}"]
     telemetry_rows = int(cam_group.attrs["telemetry_row_count"])
     frame = cam_group["counts"][frame_index]
-    return frame[telemetry_rows:, :]
+    return frame[image_row_slice(telemetry_rows), :]
 
 
 def read_timestamps(store_path: Path, camera_index: int) -> np.ndarray:

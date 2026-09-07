@@ -78,6 +78,41 @@ def test_ingest_allows_different_content_same_shape(tmp_path, storage, db_sessio
     assert len(list(storage.list_dataset_ids())) == 2
 
 
+def test_ingest_with_no_telemetry_rows(tmp_path, storage, db_session):
+    """A capture with no telemetry rows: default_telemetry_row_count=0 keeps
+    the full frame height and computes stats over every row."""
+    src = tmp_path / "no_telemetry.npz"
+    write_single_camera_npz(src, n_frames=8)
+
+    kwargs = {**INGEST_KWARGS, "default_telemetry_row_count": 0}
+    metadata = ingest_dataset(src, storage, db_session, **kwargs)
+
+    cam = metadata.auto.cameras[0]
+    assert cam.telemetry_row_count == 0
+    assert cam.frame_height == 12  # full height, nothing sliced off
+    assert cam.counts_min is not None
+
+    full_frame = zarr_store.read_frame(storage.zarr_store_path(metadata.auto.dataset_id), 0, 0)
+    image = zarr_store.read_frame_image(storage.zarr_store_path(metadata.auto.dataset_id), 0, 0)
+    np.testing.assert_array_equal(image, full_frame)
+
+
+def test_ingest_with_bottom_telemetry_rows(tmp_path, storage, db_session):
+    src = tmp_path / "bottom_telemetry.npz"
+    write_single_camera_npz(src, n_frames=8)
+
+    kwargs = {**INGEST_KWARGS, "default_telemetry_row_count": -2}
+    metadata = ingest_dataset(src, storage, db_session, **kwargs)
+
+    cam = metadata.auto.cameras[0]
+    assert cam.telemetry_row_count == -2
+    assert cam.frame_height == 10  # 12 total - bottom 2
+
+    full_frame = zarr_store.read_frame(storage.zarr_store_path(metadata.auto.dataset_id), 0, 0)
+    image = zarr_store.read_frame_image(storage.zarr_store_path(metadata.auto.dataset_id), 0, 0)
+    np.testing.assert_array_equal(image, full_frame[:-2, :])
+
+
 def test_ingest_single_camera_npz(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=20)

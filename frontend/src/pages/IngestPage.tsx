@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { cancelUpload, confirmIngest, getJobStatus, inspectUpload } from '../api/client'
-import { KeyMappingEditor } from '../components/KeyMappingEditor'
+import { KeyMappingEditor, TelemetryRowsSelect } from '../components/KeyMappingEditor'
 import { ProgressBar } from '../components/ProgressBar'
 import type { CameraMapping, JobStatusResponse, UploadInspectionResponse } from '../api/types'
 
@@ -205,8 +205,33 @@ export function IngestPage({ onIngested }: { onIngested: (datasetId: string) => 
             Map keys manually
           </label>
 
-          {manualMode && (
+          {manualMode ? (
             <KeyMappingEditor keys={inspection.keys} mapping={mapping} onChange={setMapping} />
+          ) : (
+            mapping.length > 0 && (
+              <div className="telemetry-rows-field">
+                <p className="key-mapping-note">
+                  <strong>Telemetry rows</strong> — raw frame rows that aren't image data and are sliced off
+                  for stats and previews (kept in the stored zarr). Set to <em>None</em> for captures without
+                  telemetry.
+                </p>
+                <ul className="telemetry-rows-list">
+                  {mapping.map((row, i) => (
+                    <li key={i}>
+                      <span>{row.camera_label ? `Camera ${row.camera_label}` : `Camera ${i}`}</span>
+                      <TelemetryRowsSelect
+                        value={row.telemetry_row_count}
+                        onChange={(v) =>
+                          setMapping(
+                            mapping.map((r, j) => (j === i ? { ...r, telemetry_row_count: v } : r)),
+                          )
+                        }
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )
           )}
 
           <div className="ingest-review-actions">

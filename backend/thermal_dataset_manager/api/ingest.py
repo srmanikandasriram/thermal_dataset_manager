@@ -54,6 +54,9 @@ class CameraMapping(BaseModel):
     camera_label: str | None = None
     frames_key: str
     timestamps_key: str
+    # Signed telemetry-row count for this camera: positive N = top N rows,
+    # negative N = bottom |N| rows, 0 = none. null -> use the server default.
+    telemetry_row_count: int | None = None
 
 
 class UploadInspectionResponse(BaseModel):
@@ -170,7 +173,12 @@ async def upload_capture(
     auto_mapping = None
     if inspection.auto_pairs is not None:
         auto_mapping = [
-            CameraMapping(camera_label=p.camera_label, frames_key=p.frames_key, timestamps_key=p.timestamps_key)
+            CameraMapping(
+                camera_label=p.camera_label,
+                frames_key=p.frames_key,
+                timestamps_key=p.timestamps_key,
+                telemetry_row_count=settings.default_telemetry_row_count,
+            )
             for p in inspection.auto_pairs
         ]
 
@@ -219,6 +227,7 @@ def confirm_ingest(
             camera_label=m.camera_label,
             frames_key=m.frames_key,
             timestamps_key=m.timestamps_key,
+            telemetry_row_count=m.telemetry_row_count,
         )
         for i, m in enumerate(request.mapping)
     ]

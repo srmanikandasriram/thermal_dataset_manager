@@ -3,6 +3,7 @@
 
 Usage:
     python backend/scripts/ingest_cli.py <path-to-capture-file> [<more files>...]
+    python backend/scripts/ingest_cli.py --telemetry-rows 0 no_telemetry_capture.npz
 """
 
 import argparse
@@ -19,9 +20,24 @@ from thermal_dataset_manager.storage.filesystem import FilesystemDatasetStorage
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest one or more raw thermal capture files.")
     parser.add_argument("paths", nargs="+", type=Path, help="Source .npz/.npz.zst/.h5 files")
+    parser.add_argument(
+        "--telemetry-rows",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Telemetry rows per frame, applied to every camera in every file. "
+            "2 (default) = top 2 rows are telemetry; 0 = no telemetry rows; "
+            "-2 = bottom 2 rows are telemetry. "
+            "Overrides THERMAL_DEFAULT_TELEMETRY_ROW_COUNT for this run."
+        ),
+    )
     args = parser.parse_args()
 
     settings = get_settings()
+    telemetry_row_count = (
+        args.telemetry_rows if args.telemetry_rows is not None else settings.default_telemetry_row_count
+    )
     storage = FilesystemDatasetStorage(settings.data_root)
     engine = make_engine(settings.catalog_db)
     init_db(engine)
@@ -34,7 +50,7 @@ def main() -> int:
                     path,
                     storage,
                     session,
-                    default_telemetry_row_count=settings.default_telemetry_row_count,
+                    default_telemetry_row_count=telemetry_row_count,
                     zarr_target_chunk_bytes=settings.zarr_target_chunk_bytes,
                     stats_sample_frames=settings.stats_sample_frames,
                 )
