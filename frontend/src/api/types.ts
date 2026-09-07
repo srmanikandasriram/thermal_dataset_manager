@@ -85,6 +85,7 @@ export interface DatasetListResponse {
   items: DatasetSummary[]
   limit: number
   offset: number
+  total: number
 }
 
 export interface DatasetSearchParams {

@@ -64,6 +64,35 @@ def test_get_dataset_404(client):
     assert resp.status_code == 404
 
 
+def test_list_paginates_with_total(client, tmp_path):
+    for i in range(5):
+        src = tmp_path / f"capture_{i}.npz"
+        write_single_camera_npz(src, n_frames=5, seed=i)
+        with get_session(client.engine) as session:
+            ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+
+    first = client.get("/api/datasets?limit=2&offset=0").json()
+    assert first["total"] == 5
+    assert [i["dataset_id"] for i in first["items"]] != []
+    assert len(first["items"]) == 2
+
+    second = client.get("/api/datasets?limit=2&offset=2").json()
+    assert second["total"] == 5
+    assert len(second["items"]) == 2
+
+    last = client.get("/api/datasets?limit=2&offset=4").json()
+    assert last["total"] == 5
+    assert len(last["items"]) == 1
+
+    seen = {i["dataset_id"] for page in (first, second, last) for i in page["items"]}
+    assert len(seen) == 5
+
+    # total reflects filters, not the whole table.
+    filtered = client.get("/api/datasets?q=nonexistentterm").json()
+    assert filtered["total"] == 0
+    assert filtered["items"] == []
+
+
 def test_patch_metadata(client, tmp_path):
     metadata = _ingest_sample(client, tmp_path)
     resp = client.patch(

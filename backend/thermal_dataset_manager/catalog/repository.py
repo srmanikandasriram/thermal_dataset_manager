@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import text
+from sqlalchemy import func, text
 from sqlmodel import Session, select
 
 from thermal_dataset_manager.models.catalog import DatasetRecord, DatasetTag, Tag
@@ -101,16 +101,17 @@ def tags_for_dataset(session: Session, dataset_id: str) -> list[str]:
     return list(rows)
 
 
-def search(
+def _filtered_query(
     session: Session,
     *,
-    q: str | None = None,
-    tags: list[str] | None = None,
-    date_from: datetime | None = None,
-    date_to: datetime | None = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> list[DatasetRecord]:
+    q: str | None,
+    tags: list[str] | None,
+    date_from: datetime | None,
+    date_to: datetime | None,
+):
+    """Build the `SELECT ... FROM datasetrecord WHERE <filters>` shared by
+    `search` and `count` -- no ordering, offset or limit. Returns None when
+    a filter matches nothing (so callers can short-circuit)."""
     candidate_ids: set[str] | None = None
 
     if q:
@@ -133,12 +134,44 @@ def search(
     statement = select(DatasetRecord)
     if candidate_ids is not None:
         if not candidate_ids:
-            return []
+            return None
         statement = statement.where(DatasetRecord.dataset_id.in_(candidate_ids))
     if date_from is not None:
         statement = statement.where(DatasetRecord.ingested_at >= date_from)
     if date_to is not None:
         statement = statement.where(DatasetRecord.ingested_at <= date_to)
+    return statement
 
+
+def search(
+    session: Session,
+    *,
+    q: str | None = None,
+    tags: list[str] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> list[DatasetRecord]:
+    statement = _filtered_query(session, q=q, tags=tags, date_from=date_from, date_to=date_to)
+    if statement is None:
+        return []
     statement = statement.order_by(DatasetRecord.ingested_at.desc()).offset(offset).limit(limit)
     return list(session.exec(statement).all())
+
+
+def count(
+    session: Session,
+    *,
+    q: str | None = None,
+    tags: list[str] | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> int:
+    """Total number of datasets matching the same filters `search` uses,
+    ignoring limit/offset -- for paginated listing UIs."""
+    statement = _filtered_query(session, q=q, tags=tags, date_from=date_from, date_to=date_to)
+    if statement is None:
+        return 0
+    count_stmt = select(func.count()).select_from(statement.order_by(None).subquery())
+    return int(session.exec(count_stmt).one())

@@ -30,6 +30,7 @@ class DatasetListResponse(BaseModel):
     items: list[DatasetSummary]
     limit: int
     offset: int
+    total: int  # datasets matching the query, ignoring limit/offset
 
 
 @router.get("", response_model=DatasetListResponse)
@@ -46,6 +47,7 @@ def list_datasets(
     records = repository.search(
         session, q=q, tags=tag_list, date_from=date_from, date_to=date_to, limit=limit, offset=offset
     )
+    total = repository.count(session, q=q, tags=tag_list, date_from=date_from, date_to=date_to)
     items = [
         DatasetSummary(
             dataset_id=r.dataset_id,
@@ -60,7 +62,7 @@ def list_datasets(
         )
         for r in records
     ]
-    return DatasetListResponse(items=items, limit=limit, offset=offset)
+    return DatasetListResponse(items=items, limit=limit, offset=offset, total=total)
 
 
 @router.get("/{dataset_id}", response_model=DatasetMetadata)

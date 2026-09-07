@@ -147,6 +147,28 @@ textarea {
   gap: 1rem;
 }
 
+.browse-count {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+}
+
+.load-more-button {
+  display: block;
+  margin: 1.25rem auto 0;
+  padding: 0.5rem 1.25rem;
+  font-size: 0.9rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.load-more-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .dataset-card {
   display: flex;
   flex-direction: column;
