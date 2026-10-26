@@ -4,6 +4,9 @@
 Usage:
     python backend/scripts/ingest_cli.py <path-to-capture-file> [<more files>...]
     python backend/scripts/ingest_cli.py --telemetry-rows 0 no_telemetry_capture.npz
+    python backend/scripts/ingest_cli.py --capture run42 cam_a.npz cam_b.npz
+
+A multi-camera file is split into one dataset per camera.
 """
 
 import argparse
@@ -32,6 +35,16 @@ def main() -> int:
             "Overrides THERMAL_DEFAULT_TELEMETRY_ROW_COUNT for this run."
         ),
     )
+    parser.add_argument(
+        "--capture",
+        default=None,
+        metavar="ID",
+        help=(
+            "Capture id to give every dataset ingested in this run, to group related files "
+            "(e.g. one single-camera file per camera). Datasets split from one multi-camera "
+            "file are grouped automatically under a generated id when this is omitted."
+        ),
+    )
     args = parser.parse_args()
 
     settings = get_settings()
@@ -46,13 +59,14 @@ def main() -> int:
     with get_session(engine) as session:
         for path in args.paths:
             try:
-                metadata = ingest_dataset(
+                datasets = ingest_dataset(
                     path,
                     storage,
                     session,
                     default_telemetry_row_count=telemetry_row_count,
                     zarr_target_chunk_bytes=settings.zarr_target_chunk_bytes,
                     stats_sample_frames=settings.stats_sample_frames,
+                    capture_id=args.capture,
                 )
             except IngestValidationError as e:
                 print(f"FAILED  {path}:", file=sys.stderr)
@@ -69,7 +83,9 @@ def main() -> int:
                 print(f"    sha256:   {e.source_sha256}", file=sys.stderr)
                 exit_code = 1
                 continue
-            print(f"OK      {path} -> dataset {metadata.auto.dataset_id} ({metadata.auto.camera_count} camera(s))")
+            for metadata in datasets:
+                capture = f", capture {metadata.user.capture_id}" if metadata.user.capture_id else ""
+                print(f"OK      {path} -> dataset {metadata.auto.dataset_id} ({metadata.user.name}{capture})")
 
     return exit_code
 

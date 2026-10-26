@@ -7,7 +7,7 @@ TimestampKind = Literal["absolute_utc", "relative"]
 
 
 def image_row_slice(telemetry_row_count: int) -> slice:
-    """Row slice that drops the telemetry rows from a raw frame.
+    """Row slice selecting the image rows of a raw frame.
 
     Positive N -> the top N rows are telemetry; 0 -> no telemetry rows;
     negative N -> the bottom |N| rows are telemetry.
@@ -20,24 +20,32 @@ def image_row_slice(telemetry_row_count: int) -> slice:
     return slice(None)
 
 
-def image_height(total_height: int, telemetry_row_count: int) -> int:
-    """Image-row count once the telemetry rows (top or bottom) are removed."""
-    return total_height - abs(telemetry_row_count)
+def telemetry_row_slice(telemetry_row_count: int) -> slice:
+    """Row slice selecting the telemetry rows of a raw frame (the complement
+    of `image_row_slice`), in top-to-bottom order."""
+    n = telemetry_row_count
+    if n > 0:
+        return slice(None, n)
+    if n < 0:
+        return slice(n, None)
+    return slice(0, 0)
 
 
 @dataclass
 class NormalizedCameraCapture:
     """One camera stream extracted from a source file, in a format-agnostic shape.
 
-    `frames` includes the telemetry rows (raw fidelity is preserved as-is);
-    `telemetry_row_count` tells downstream code which rows are telemetry:
-    positive -> that many rows at the top, negative -> that many at the
-    bottom, 0 -> none. Use `image_row_slice` / `image_height` to apply it.
+    The telemetry rows are split off the raw frames at normalization time:
+    `frames` holds the image rows only, `telemetry` the stripped rows
+    (top-to-bottom, shape (n_frames, |telemetry_row_count|, W)). The signed
+    `telemetry_row_count` records where they sat in the raw frame: positive
+    -> that many rows at the top, negative -> at the bottom, 0 -> none.
     """
 
     camera_index: int
     camera_label: str | None
-    frames: np.ndarray  # (n_frames, H_total, W) uint16
+    frames: np.ndarray  # (n_frames, H, W) uint16, image rows only
+    telemetry: np.ndarray  # (n_frames, |telemetry_row_count|, W) uint16
     timestamps: np.ndarray  # (n_frames,) float64
     telemetry_row_count: int
     timestamp_kind: TimestampKind
@@ -45,11 +53,10 @@ class NormalizedCameraCapture:
 
 @dataclass
 class NormalizedCapture:
-    """All camera streams found in one source file, plus any other arrays in
-    the source file that weren't mapped to a camera's frames/timestamps --
-    preserved as-is rather than silently dropped (e.g. telemetry-offset
-    arrays alongside frame data).
+    """All camera streams found in one source file. Any other arrays in the
+    file are not ingested; `other_variables` is a free-text summary of them
+    (name, shape, dtype) kept in the dataset metadata.
     """
 
     cameras: list[NormalizedCameraCapture]
-    extra_arrays: dict[str, np.ndarray]
+    other_variables: str = ""

@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -14,15 +15,33 @@ from thermal_dataset_manager.storage.filesystem import FilesystemDatasetStorage
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
 
+SortField = Literal[
+    "name",
+    "description",
+    "ingested_at",
+    "source_filename",
+    "capture_id",
+    "camera_count",
+    "total_frame_count",
+    "max_duration_seconds",
+    "scene_category",
+    "capture_location",
+]
+
+
 class DatasetSummary(BaseModel):
     dataset_id: str
     name: str
     description: str
     tags: list[str]
     ingested_at: datetime
+    source_filename: str
+    capture_id: str | None
     camera_count: int
     total_frame_count: int
     max_duration_seconds: float | None
+    scene_category: str | None
+    capture_location: str | None
     thumbnail_url: str
 
 
@@ -39,15 +58,27 @@ def list_datasets(
     tags: str | None = None,
     date_from: datetime | None = None,
     date_to: datetime | None = None,
+    capture_id: str | None = None,
+    sort: SortField = "ingested_at",
+    order: Literal["asc", "desc"] = "desc",
     limit: int = 50,
     offset: int = 0,
     session: Session = Depends(get_db_session),
 ) -> DatasetListResponse:
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
     records = repository.search(
-        session, q=q, tags=tag_list, date_from=date_from, date_to=date_to, limit=limit, offset=offset
+        session,
+        q=q,
+        tags=tag_list,
+        date_from=date_from,
+        date_to=date_to,
+        capture_id=capture_id,
+        sort_by=sort,
+        descending=order == "desc",
+        limit=limit,
+        offset=offset,
     )
-    total = repository.count(session, q=q, tags=tag_list, date_from=date_from, date_to=date_to)
+    total = repository.count(session, q=q, tags=tag_list, date_from=date_from, date_to=date_to, capture_id=capture_id)
     items = [
         DatasetSummary(
             dataset_id=r.dataset_id,
@@ -55,10 +86,14 @@ def list_datasets(
             description=r.description,
             tags=repository.tags_for_dataset(session, r.dataset_id),
             ingested_at=r.ingested_at,
+            source_filename=r.source_filename,
+            capture_id=r.capture_id,
             camera_count=r.camera_count,
             total_frame_count=r.total_frame_count,
             max_duration_seconds=r.max_duration_seconds,
-            thumbnail_url=f"/api/datasets/{r.dataset_id}/cameras/0/thumbnail.png",
+            scene_category=r.scene_category,
+            capture_location=r.capture_location,
+            thumbnail_url=f"/api/datasets/{r.dataset_id}/cameras/{r.camera_index or 0}/thumbnail.png",
         )
         for r in records
     ]
@@ -101,8 +136,7 @@ def recompute_dataset_metadata(
     session: Session = Depends(get_db_session),
     settings: Settings = Depends(get_app_settings),
 ) -> DatasetMetadata:
-    """Recompute this dataset's auto-metadata (stats, thumbnails, extra-array
-    inventory...) from its already-ingested zarr store. Useful after adding
+    """Recompute this dataset's auto-metadata (stats, thumbnails...) from its already-ingested zarr store. Useful after adding
     new computed fields, or to retry if background computation after ingest
     failed -- never re-reads the original source file.
     """

@@ -1,10 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState } from 'react'
+import { Fragment, useState } from 'react'
 import { getDataset, recomputeMetadata, updateDatasetMetadata } from '../api/client'
-import { ExtraArraysPanel } from '../components/ExtraArraysPanel'
 import { FrameScrubber } from '../components/FrameScrubber'
 import { MetadataEditor } from '../components/MetadataEditor'
-import type { UserMetadataUpdate } from '../api/types'
+import type { CameraTelemetryMetadata, UserMetadataUpdate } from '../api/types'
 
 const PENDING_POLL_INTERVAL_MS = 2000
 
@@ -14,6 +13,35 @@ function formatBytes(hash: string): string {
 
 function formatStat(value: number | null, digits = 0): string {
   return value == null ? '—' : value.toFixed(digits)
+}
+
+/** Static Boson+ telemetry fields, rendered as <dt>/<dd> pairs inside the
+ *  per-camera stats <dl>. Rows with no value are omitted. */
+function TelemetryRows({ telemetry }: { telemetry: CameraTelemetryMetadata }) {
+  const rows: [string, string | null][] = [
+    ['Part number', telemetry.part_number],
+    ['Camera serial', telemetry.camera_serial?.toString() ?? null],
+    ['Sensor serial', telemetry.sensor_serial?.toString() ?? null],
+    ['Firmware', telemetry.software_revision?.join('.') ?? null],
+    ['Telemetry rev.', telemetry.telemetry_revision?.toString() ?? null],
+    ['Frame rate', telemetry.frame_rate_hz != null ? `${telemetry.frame_rate_hz} Hz` : null],
+    ['Gain mode', telemetry.gain_mode],
+    ['NUC table', telemetry.nuc_table?.toString() ?? null],
+    ['External sync', telemetry.external_sync_slave == null ? null : telemetry.external_sync_slave ? 'slave' : 'free-running'],
+    ['Pipeline', telemetry.pipeline_enabled?.length ? telemetry.pipeline_enabled.join(', ') : null],
+  ]
+  return (
+    <>
+      {rows
+        .filter(([, value]) => value != null)
+        .map(([label, value]) => (
+          <Fragment key={label}>
+            <dt>{label}</dt>
+            <dd>{value}</dd>
+          </Fragment>
+        ))}
+    </>
+  )
 }
 
 export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; onBack: () => void }) {
@@ -82,6 +110,12 @@ export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; on
             <dl>
               <dt>Source file</dt>
               <dd>{auto.source_filename}</dd>
+              {data.user.capture_id && (
+                <>
+                  <dt>Capture</dt>
+                  <dd>{data.user.capture_id}</dd>
+                </>
+              )}
               <dt>Source format</dt>
               <dd>{auto.source_format}</dd>
               <dt>Ingested</dt>
@@ -93,7 +127,12 @@ export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; on
             </dl>
           </div>
 
-          <ExtraArraysPanel datasetId={datasetId} extraArrays={auto.extra_arrays} />
+          {auto.other_variables && (
+            <div className="other-variables">
+              <h3>Other variables in source file (not ingested)</h3>
+              <pre>{auto.other_variables}</pre>
+            </div>
+          )}
         </div>
 
         <div className="detail-preview">
@@ -129,6 +168,7 @@ export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; on
                 <dd>
                   {activeCamera.counts_min == null ? '—' : `${activeCamera.counts_min} – ${activeCamera.counts_max}`}
                 </dd>
+                {activeCamera.telemetry && <TelemetryRows telemetry={activeCamera.telemetry} />}
               </dl>
             </>
           )}

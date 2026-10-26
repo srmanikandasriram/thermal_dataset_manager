@@ -1,7 +1,6 @@
 """Path-building helpers for the on-disk dataset layout.
 
     <data_root>/
-        staging/<upload_token>/<original_filename>
         datasets/<dataset_id>/
             raw.zarr/
             metadata.json
@@ -11,10 +10,6 @@
 """
 
 from pathlib import Path
-
-
-def staging_dir(data_root: Path, upload_token: str) -> Path:
-    return data_root / "staging" / upload_token
 
 
 def dataset_dir(data_root: Path, dataset_id: str) -> Path:

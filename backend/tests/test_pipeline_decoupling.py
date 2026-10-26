@@ -7,7 +7,7 @@ def test_write_raw_dataset_is_pending_with_cheap_fields_only(tmp_path, storage, 
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=10)
 
-    bare = write_raw_dataset(
+    [bare] = write_raw_dataset(
         src,
         storage,
         db_session,
@@ -34,7 +34,7 @@ def test_raw_dataset_is_immediately_locked_and_catalogued(tmp_path, storage, db_
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=5)
 
-    bare = write_raw_dataset(
+    [bare] = write_raw_dataset(
         src,
         storage,
         db_session,
@@ -55,7 +55,7 @@ def test_recompute_after_write_raw_dataset_flips_to_ready(tmp_path, storage, db_
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=10)
 
-    bare = write_raw_dataset(
+    [bare] = write_raw_dataset(
         src,
         storage,
         db_session,
@@ -76,7 +76,7 @@ def test_ingest_dataset_convenience_wrapper_is_fully_ready(tmp_path, storage, db
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=10)
 
-    metadata = ingest_dataset(
+    [metadata] = ingest_dataset(
         src,
         storage,
         db_session,

@@ -24,6 +24,8 @@ def make_engine(catalog_db_url: str):
 # migration system -- non-SQLite backends would need their own ALTER.
 _DATASETRECORD_ADDED_COLUMNS = {
     "source_sha256": "VARCHAR NOT NULL DEFAULT ''",
+    "camera_index": "INTEGER",
+    "capture_id": "VARCHAR",
 }
 
 

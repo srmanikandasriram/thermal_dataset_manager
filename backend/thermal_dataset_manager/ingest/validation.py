@@ -38,10 +38,10 @@ def validate(capture: NormalizedCapture) -> None:
                 f"{prefix}: frame_count ({n_frames}) does not match timestamp_count ({len(cam.timestamps)})"
             )
 
-        if h_total <= abs(cam.telemetry_row_count):
+        if h_total <= 0:
             errors.append(
-                f"{prefix}: frame height ({h_total}) must exceed |telemetry_row_count| "
-                f"({cam.telemetry_row_count})"
+                f"{prefix}: no image rows left after removing {abs(cam.telemetry_row_count)} "
+                f"telemetry row(s); frame height must exceed |telemetry_row_count|"
             )
 
         if w <= 0:

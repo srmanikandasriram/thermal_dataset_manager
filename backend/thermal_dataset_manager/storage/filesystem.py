@@ -87,39 +87,3 @@ class FilesystemDatasetStorage:
         _chmod_tree(zarr_path, writable=False)
         _chmod_tree(manifest, writable=False)
         _chmod_tree(metadata, writable=False)
-
-    def new_staging_dir(self, upload_token: str) -> Path:
-        path = layout.staging_dir(self.data_root, upload_token)
-        path.mkdir(parents=True, exist_ok=True)
-        return path
-
-    def remove_staging_dir(self, upload_token: str) -> None:
-        path = layout.staging_dir(self.data_root, upload_token)
-        if path.exists():
-            shutil.rmtree(path)
-
-    def sweep_stale_staging(self, max_age_seconds: float) -> int:
-        """Delete staged-upload directories older than max_age_seconds.
-
-        Covers uploads that never reached /confirm: interrupted transfers
-        (the write loop's own error handling should catch most of these,
-        but not a server crash mid-write) and abandoned reviews where the
-        user never clicked "Ingest". Safe to call repeatedly; returns the
-        number of directories removed.
-        """
-        staging_root = self.data_root / "staging"
-        if not staging_root.exists():
-            return 0
-        now = time.time()
-        removed = 0
-        for entry in staging_root.iterdir():
-            if not entry.is_dir():
-                continue
-            try:
-                age = now - entry.stat().st_mtime
-            except FileNotFoundError:
-                continue
-            if age > max_age_seconds:
-                shutil.rmtree(entry, ignore_errors=True)
-                removed += 1
-        return removed

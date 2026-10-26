@@ -1,14 +1,17 @@
-from collections.abc import Mapping
 from pathlib import Path
 
 import numpy as np
 
-from thermal_dataset_manager.ingest.key_registry import CameraKeyPair, discover_camera_keys
-from thermal_dataset_manager.ingest.readers import h5_reader, npz_reader
+from thermal_dataset_manager.ingest.key_registry import CameraKeyPair
+from thermal_dataset_manager.ingest.readers.h5_reader import H5Source
+from thermal_dataset_manager.ingest.readers.npz_reader import NpzSource
+from thermal_dataset_manager.ingest.readers.source import ArraySource
 from thermal_dataset_manager.ingest.types import (
     NormalizedCameraCapture,
     NormalizedCapture,
     TimestampKind,
+    image_row_slice,
+    telemetry_row_slice,
 )
 from thermal_dataset_manager.models.metadata import SourceFormat
 
@@ -33,29 +36,46 @@ def _squeeze_trailing_singleton_dims(frames: np.ndarray) -> np.ndarray:
     return frames
 
 
-def load_array_map(path: Path, source_format: SourceFormat) -> dict[str, np.ndarray]:
-    """Read every array/dataset in a source file into a flat name -> ndarray map,
-    dispatching to the format-specific reader. This is the shared first step for
-    both auto-detected and explicitly user-mapped ingest.
-    """
+def open_source(path: Path, source_format: SourceFormat) -> ArraySource:
+    """Open a source file lazily, dispatching to the format-specific reader.
+    Use as a context manager; no array data is read until `read` is called."""
     if source_format in ("npz", "npz.zst"):
-        return npz_reader.load_array_map(path)
+        return NpzSource(path)
     if source_format == "h5":
-        return h5_reader.load_array_map(path)
+        return H5Source(path)
     raise ValueError(f"Unsupported source format: {source_format}")
 
 
+def describe_other_variables(source: ArraySource, used_keys: set[str]) -> str:
+    """Free-text summary (name, shape, dtype; one line each) of the arrays that
+    are not ingested, built from headers alone."""
+    return "\n".join(
+        f"{key}: shape={info.shape}, dtype={info.dtype}"
+        for key, info in source.infos.items()
+        if key not in used_keys
+    )
+
+
 def build_camera_capture(
-    array_map: Mapping[str, np.ndarray],
+    source: ArraySource,
     pair: CameraKeyPair,
     telemetry_row_count: int,
 ) -> NormalizedCameraCapture:
-    frames = _squeeze_trailing_singleton_dims(np.asarray(array_map[pair.frames_key]))
-    timestamps = np.asarray(array_map[pair.timestamps_key]).astype("float64")
+    frames = _squeeze_trailing_singleton_dims(source.read(pair.frames_key))
+    timestamps = source.read(pair.timestamps_key).astype("float64")
+    if frames.ndim == 3:
+        # Split the telemetry rows off the raw frames. (Other shapes are left
+        # alone for validation to reject.) A telemetry_row_count at least as
+        # large as the frame height leaves no image rows; validation catches it.
+        telemetry = frames[:, telemetry_row_slice(telemetry_row_count), :]
+        frames = frames[:, image_row_slice(telemetry_row_count), :]
+    else:
+        telemetry = np.zeros((0, 0, 0), dtype="uint16")
     return NormalizedCameraCapture(
         camera_index=pair.camera_index,
         camera_label=pair.camera_label,
-        frames=frames.astype("uint16", copy=False),
+        frames=frames,
+        telemetry=telemetry,
         timestamps=timestamps,
         telemetry_row_count=telemetry_row_count,
         timestamp_kind=infer_timestamp_kind(timestamps),
@@ -63,18 +83,18 @@ def build_camera_capture(
 
 
 def build_normalized_capture_from_pairs(
-    array_map: Mapping[str, np.ndarray],
+    source: ArraySource,
     pairs: list[CameraKeyPair],
     default_telemetry_row_count: int,
+    other_variables: str = "",
 ) -> NormalizedCapture:
-    """Each pair's own `telemetry_row_count` wins; pairs that leave it unset
-    (e.g. everything from auto-detection) fall back to the default."""
-    used_keys = {pair.frames_key for pair in pairs} | {pair.timestamps_key for pair in pairs}
-    extra_arrays = {key: np.asarray(value) for key, value in array_map.items() if key not in used_keys}
+    """Loads only the given pairs' frames and timestamps. Each pair's own
+    `telemetry_row_count` wins; pairs that leave it unset (e.g. everything
+    from auto-detection) fall back to the default."""
     return NormalizedCapture(
         cameras=[
             build_camera_capture(
-                array_map,
+                source,
                 pair,
                 pair.telemetry_row_count
                 if pair.telemetry_row_count is not None
@@ -82,14 +102,5 @@ def build_normalized_capture_from_pairs(
             )
             for pair in pairs
         ],
-        extra_arrays=extra_arrays,
+        other_variables=other_variables,
     )
-
-
-def build_normalized_capture(
-    array_map: Mapping[str, np.ndarray],
-    telemetry_row_count: int,
-) -> NormalizedCapture:
-    """Auto-detect camera streams via the key registry and build a NormalizedCapture."""
-    pairs = discover_camera_keys(list(array_map.keys()))
-    return build_normalized_capture_from_pairs(array_map, pairs, telemetry_row_count)

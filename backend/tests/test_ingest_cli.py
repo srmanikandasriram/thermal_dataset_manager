@@ -25,11 +25,9 @@ def _run(monkeypatch, tmp_path, argv, capture_kwargs):
 
     def fake_ingest(path, storage, session, **kwargs):
         capture_kwargs.append(kwargs)
-        return type(
-            "M",
-            (),
-            {"auto": type("A", (), {"dataset_id": "X", "camera_count": 1})()},
-        )()
+        auto = type("A", (), {"dataset_id": "X"})()
+        user = type("U", (), {"name": "n", "capture_id": None})()
+        return [type("M", (), {"auto": auto, "user": user})()]
 
     monkeypatch.setattr(cli, "ingest_dataset", fake_ingest)
     monkeypatch.setattr("sys.argv", ["ingest_cli.py", *argv])

@@ -37,7 +37,8 @@ def _ingest_sample(client, tmp_path, n_frames=10):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=n_frames)
     with get_session(client.engine) as session:
-        return ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+        [meta] = ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+        return meta
 
 
 def test_health(client):
@@ -52,7 +53,11 @@ def test_list_and_get_dataset(client, tmp_path):
     assert resp.status_code == 200
     body = resp.json()
     assert len(body["items"]) == 1
-    assert body["items"][0]["dataset_id"] == metadata.auto.dataset_id
+    summary = body["items"][0]
+    assert summary["dataset_id"] == metadata.auto.dataset_id
+    # summary carries the optional-column fields the list view can show
+    assert summary["source_filename"] == metadata.auto.source_filename
+    assert "scene_category" in summary and "capture_location" in summary
 
     resp = client.get(f"/api/datasets/{metadata.auto.dataset_id}")
     assert resp.status_code == 200
@@ -62,6 +67,40 @@ def test_list_and_get_dataset(client, tmp_path):
 def test_get_dataset_404(client):
     resp = client.get("/api/datasets/does-not-exist")
     assert resp.status_code == 404
+
+
+def test_list_sorts_by_requested_field(client, tmp_path):
+    # three captures with distinct frame counts and names
+    specs = [("bravo", 7), ("alpha", 3), ("charlie", 12)]
+    for name, n in specs:
+        src = tmp_path / f"{name}.npz"
+        write_single_camera_npz(src, n_frames=n, seed=n)
+        with get_session(client.engine) as session:
+            [meta] = ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+            client.patch(f"/api/datasets/{meta.auto.dataset_id}/metadata", json={"name": name})
+
+    by_name = client.get("/api/datasets?sort=name&order=asc").json()
+    assert [i["name"] for i in by_name["items"]] == ["alpha", "bravo", "charlie"]
+
+    by_frames_desc = client.get("/api/datasets?sort=total_frame_count&order=desc").json()
+    assert [i["total_frame_count"] for i in by_frames_desc["items"]] == [12, 7, 3]
+
+    # unknown sort field is rejected by the Literal type
+    assert client.get("/api/datasets?sort=bogus").status_code == 422
+
+
+def test_list_sort_is_stable_across_pages(client, tmp_path):
+    for i in range(5):
+        src = tmp_path / f"cap_{i}.npz"
+        write_single_camera_npz(src, n_frames=5, seed=i)  # identical frame counts -> ties
+        with get_session(client.engine) as session:
+            ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+
+    q = "/api/datasets?sort=total_frame_count&order=asc&limit=2"
+    ids = []
+    for offset in (0, 2, 4):
+        ids += [i["dataset_id"] for i in client.get(f"{q}&offset={offset}").json()["items"]]
+    assert len(ids) == len(set(ids)) == 5  # no row repeated or skipped despite the ties
 
 
 def test_list_paginates_with_total(client, tmp_path):

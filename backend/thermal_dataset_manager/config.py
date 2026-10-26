@@ -29,19 +29,6 @@ class Settings(BaseSettings):
     # statistics at ingest time, to keep ingest fast for long captures.
     stats_sample_frames: int = 64
 
-    # Staged uploads (post-upload, pre-confirm) older than this are swept up
-    # as orphaned -- covers interrupted transfers and abandoned reviews that
-    # never reach /confirm.
-    staging_max_age_hours: float = 24.0
-
-    @property
-    def staging_max_age_seconds(self) -> float:
-        return self.staging_max_age_hours * 3600.0
-
-    @property
-    def staging_dir(self) -> Path:
-        return self.data_root / "staging"
-
     @property
     def datasets_dir(self) -> Path:
         return self.data_root / "datasets"
@@ -56,6 +43,5 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     settings = Settings()
-    settings.staging_dir.mkdir(parents=True, exist_ok=True)
     settings.datasets_dir.mkdir(parents=True, exist_ok=True)
     return settings

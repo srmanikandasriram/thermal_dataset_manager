@@ -8,9 +8,38 @@ TimestampKind = Literal["absolute_utc", "relative"]
 MetadataStatus = Literal["pending", "ready"]
 
 
+class CameraTelemetryMetadata(BaseModel):
+    """Static fields decoded from the Boson+ telemetry line embedded in each
+    frame (datasheet section 6.7 / Table 5). Only quantities that stay
+    constant across the capture are kept here -- identity, build, and
+    capture-configuration fields; per-frame values (frame counter, timestamp,
+    ROI stats, temperatures) are not.
+
+    Absent (the whole object is None) when the stream has no telemetry rows
+    or no telemetry row validated. Individual fields are None when they could
+    not be read or -- unexpectedly -- disagreed across the sampled frames.
+    """
+
+    telemetry_revision: int | None = None
+    part_number: str | None = None
+    camera_serial: int | None = None
+    sensor_serial: int | None = None
+    software_revision: list[int] | None = None  # [major, minor, patch] words as stored
+    frame_rate_hz: int | None = None
+    gain_mode: str | None = None  # high | low | automatic | reserved
+    nuc_table: int | None = None
+    image_stats_roi: list[int] | None = None  # 4 words: the ROI the mean/min/max cover
+    external_sync_slave: bool | None = None
+    pipeline_enabled: list[str] | None = None  # names of enabled processing stages
+    frames_sampled: int = 0
+
+
 class CameraStreamMetadata(BaseModel):
     """Auto-computed, per-camera-stream metadata. Immutable after ingest."""
 
+    # Index of this stream in the source file. A multi-camera source file is
+    # split into one dataset per camera, so this is the dataset's only
+    # camera and keeps the source numbering (the zarr group is camera_<n>).
     camera_index: int
     camera_label: str | None = None
     frame_count: int
@@ -18,6 +47,7 @@ class CameraStreamMetadata(BaseModel):
     frame_width: int
     # Signed: positive N = top N rows are telemetry, negative N = bottom
     # |N| rows, 0 = no telemetry rows.
+    # The rows themselves are stored in the zarr `telemetry` array.
     telemetry_row_count: int
     dtype: str = "uint16"
 
@@ -37,17 +67,7 @@ class CameraStreamMetadata(BaseModel):
     preview_vmin: float | None = None
     preview_vmax: float | None = None
 
-
-class ExtraArrayMetadata(BaseModel):
-    """An array from the source file that wasn't mapped to any camera's
-    frames/timestamps. Preserved verbatim in the zarr store's `extra/`
-    group rather than being silently dropped -- e.g. a telemetry-offset
-    array alongside frame data.
-    """
-
-    key: str
-    shape: list[int]
-    dtype: str
+    telemetry: CameraTelemetryMetadata | None = None
 
 
 class AutoMetadata(BaseModel):
@@ -71,7 +91,10 @@ class AutoMetadata(BaseModel):
 
     camera_count: int
     cameras: list[CameraStreamMetadata]
-    extra_arrays: list[ExtraArrayMetadata] = Field(default_factory=list)
+    # Free-text summary (one "name: shape=..., dtype=..." line each) of the
+    # source-file arrays that weren't ingested -- everything but the camera
+    # frames/timestamps. Informational only; the arrays themselves are dropped.
+    other_variables: str = ""
 
 
 class UserMetadata(BaseModel):
@@ -81,6 +104,9 @@ class UserMetadata(BaseModel):
     description: str = ""
     tags: list[str] = Field(default_factory=list)
     notes: str = ""
+    # Datasets that belong to the same capture (e.g. the cameras of one
+    # multi-camera file, or files grouped with ingest_cli --capture) share this.
+    capture_id: str | None = None
     capture_location: str | None = None
     scene_category: str | None = None
     custom_fields: dict[str, str] = Field(default_factory=dict)
@@ -96,6 +122,7 @@ class UserMetadataUpdate(BaseModel):
     description: str | None = None
     tags: list[str] | None = None
     notes: str | None = None
+    capture_id: str | None = None
     capture_location: str | None = None
     scene_category: str | None = None
     custom_fields: dict[str, str] | None = None

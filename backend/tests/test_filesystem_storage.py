@@ -14,7 +14,7 @@ INGEST_KWARGS = dict(
 def test_metadata_writable_through_lock(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=5)
-    metadata = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [metadata] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     dataset_id = metadata.auto.dataset_id
 
     metadata_path = storage.dataset_dir(dataset_id) / "metadata.json"
@@ -36,7 +36,7 @@ def test_metadata_writable_through_lock(tmp_path, storage, db_session):
 def test_zarr_store_is_not_writable_after_ingest(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=5)
-    metadata = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [metadata] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     store_path = storage.zarr_store_path(metadata.auto.dataset_id)
 
     for root, dirs, files in os.walk(store_path):

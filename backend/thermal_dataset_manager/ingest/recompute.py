@@ -20,7 +20,7 @@ from thermal_dataset_manager import __version__ as INGEST_TOOL_VERSION
 from thermal_dataset_manager.catalog import repository
 from thermal_dataset_manager.ingest import preview_gen
 from thermal_dataset_manager.ingest.metadata_compute import compute_camera_metadata
-from thermal_dataset_manager.models.metadata import AutoMetadata, DatasetMetadata, ExtraArrayMetadata
+from thermal_dataset_manager.models.metadata import AutoMetadata, DatasetMetadata
 from thermal_dataset_manager.storage import layout, zarr_store
 from thermal_dataset_manager.storage.filesystem import FilesystemDatasetStorage
 
@@ -53,20 +53,13 @@ def recompute_metadata(
                 camera_index=camera_index,
                 camera_label=cam_group.attrs.get("camera_label"),
                 frames=cam_group["counts"],
+                telemetry=cam_group["telemetry"] if "telemetry" in cam_group.array_keys() else None,
                 timestamps=cam_group["timestamps"][:],
                 telemetry_row_count=int(cam_group.attrs["telemetry_row_count"]),
                 timestamp_kind=cam_group.attrs["timestamp_kind"],
                 stats_sample_frames=stats_sample_frames,
             )
         )
-
-    extra_arrays: list[ExtraArrayMetadata] = []
-    if "extra" in root.group_keys():
-        extra_group = root["extra"]
-        extra_arrays = [
-            ExtraArrayMetadata(key=key, shape=list(extra_group[key].shape), dtype=str(extra_group[key].dtype))
-            for key in extra_group.array_keys()
-        ]
 
     auto = AutoMetadata(
         dataset_id=dataset_id,
@@ -77,7 +70,7 @@ def recompute_metadata(
         ingest_tool_version=INGEST_TOOL_VERSION,
         camera_count=len(cameras),
         cameras=cameras,
-        extra_arrays=extra_arrays,
+        other_variables=existing.auto.other_variables,
     )
     metadata = DatasetMetadata(auto=auto, user=existing.user)
 

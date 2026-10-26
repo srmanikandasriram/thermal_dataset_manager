@@ -1,6 +1,6 @@
 # thermal_dataset_manager
 
-A lightweight browser based app to manage, preview, organize raw thermal video captures.
+A lightweight browser based app to browse, preview, and organize raw thermal video captures. Ingest is CLI-only (see below).
 
 Raw captures (`.npz`, `.npz.zst`, `.h5`) are ingested, validated, and converted into a canonical
 [Zarr](https://zarr.dev/) layout with per-dataset metadata — so downstream tooling has one
@@ -47,11 +47,25 @@ python backend/scripts/ingest_cli.py path/to/capture.npz [more_captures...]
 python backend/scripts/ingest_cli.py --telemetry-rows 0 path/to/capture.npz
 ```
 
-Each raw frame may carry non-image **telemetry rows**. `--telemetry-rows` (CLI) and a per-camera
-selector in the ingest UI's key mapping control which rows those are: `2` (default) = the top 2
-rows, `0` = none, `-2` = the bottom 2 rows. The default is `THERMAL_DEFAULT_TELEMETRY_ROW_COUNT`.
-Telemetry rows are kept verbatim in the stored Zarr; they're only sliced off for stats and
-preview rendering, and excluded from the reported `frame_height`.
+A source file with several cameras is split at ingest into **one dataset per camera**, so a dataset
+is always a single thermal video. Its Zarr group keeps the camera's index from the source file
+(`camera_1` for `raw_thr_frames_1`). The datasets from one file share a `capture_id` (generated); use
+`--capture ID` to group datasets from separate files under one capture id. Re-ingesting a file skips
+cameras that were already ingested (deduplicated on source hash + camera index).
+
+Only the camera frames and timestamps are ingested, and only frame arrays of dtype `uint16` (others are
+skipped; a file with none is rejected). The readers inspect array headers first and load just the
+frames and timestamps, so unrelated arrays in the file are never read into memory. Any other arrays in the source file (auxiliary
+sensors, etc.) are not stored; a free-text summary of them (name, shape, dtype) is kept in the
+dataset's metadata as `other_variables`.
+
+Each raw frame may carry non-image **telemetry rows**. `--telemetry-rows` controls which rows those
+are: `2` (default) = the top 2 rows, `0` = none, `-2` = the bottom 2 rows. The default is `THERMAL_DEFAULT_TELEMETRY_ROW_COUNT`.
+Telemetry rows are stripped from the frames at ingest and stored verbatim in a separate `telemetry`
+array alongside `counts` in the same Zarr store (`counts` holds image rows only). The Boson+ telemetry
+line is also parsed during ingest, and its static fields (serials, part number, frame rate, gain mode,
+enabled pipeline stages...) are recorded in the dataset's metadata. Stores written by older versions
+(telemetry inside `counts`, schema v1) are rejected with a message to re-ingest.
 
 Each source file's arrays are matched by name against the registry in
 `backend/thermal_dataset_manager/ingest/key_registry.py` (currently `raw_thr_frames`/
@@ -75,7 +89,7 @@ source .venv/bin/activate
 # Rebuild the search catalog from disk (see "Copy .env.example" above for when you'd need this).
 python backend/scripts/rebuild_catalog_cli.py
 
-# Recompute a dataset's auto-metadata (stats, thumbnails, extra-array inventory) from its
+# Recompute a dataset's auto-metadata (stats, thumbnails) from its
 # already-ingested zarr store -- e.g. after extending what gets computed, or to retry if
 # background metadata computation after an ingest failed. Omit the IDs to recompute everything.
 python backend/scripts/recompute_metadata_cli.py [dataset_id ...]

@@ -1,9 +1,24 @@
 // Mirrors backend Pydantic response shapes
-// (backend/thermal_dataset_manager/models/metadata.py, api/datasets.py, api/ingest.py)
+// (backend/thermal_dataset_manager/models/metadata.py, api/datasets.py)
 
 export type TimestampKind = 'absolute_utc' | 'relative'
 export type SourceFormat = 'npz' | 'npz.zst' | 'h5'
 export type MetadataStatus = 'pending' | 'ready'
+
+export interface CameraTelemetryMetadata {
+  telemetry_revision: number | null
+  part_number: string | null
+  camera_serial: number | null
+  sensor_serial: number | null
+  software_revision: number[] | null
+  frame_rate_hz: number | null
+  gain_mode: string | null
+  nuc_table: number | null
+  image_stats_roi: number[] | null
+  external_sync_slave: boolean | null
+  pipeline_enabled: string[] | null
+  frames_sampled: number
+}
 
 export interface CameraStreamMetadata {
   camera_index: number
@@ -23,12 +38,7 @@ export interface CameraStreamMetadata {
   counts_std: number | null
   preview_vmin: number | null
   preview_vmax: number | null
-}
-
-export interface ExtraArrayMetadata {
-  key: string
-  shape: number[]
-  dtype: string
+  telemetry: CameraTelemetryMetadata | null
 }
 
 export interface AutoMetadata {
@@ -41,7 +51,7 @@ export interface AutoMetadata {
   metadata_status: MetadataStatus
   camera_count: number
   cameras: CameraStreamMetadata[]
-  extra_arrays: ExtraArrayMetadata[]
+  other_variables: string
 }
 
 export interface UserMetadata {
@@ -49,6 +59,7 @@ export interface UserMetadata {
   description: string
   tags: string[]
   notes: string
+  capture_id: string | null
   capture_location: string | null
   scene_category: string | null
   custom_fields: Record<string, string>
@@ -59,6 +70,7 @@ export interface UserMetadataUpdate {
   description?: string
   tags?: string[]
   notes?: string
+  capture_id?: string | null
   capture_location?: string | null
   scene_category?: string | null
   custom_fields?: Record<string, string>
@@ -75,11 +87,29 @@ export interface DatasetSummary {
   description: string
   tags: string[]
   ingested_at: string
+  source_filename: string
+  capture_id: string | null
   camera_count: number
   total_frame_count: number
   max_duration_seconds: number | null
+  scene_category: string | null
+  capture_location: string | null
   thumbnail_url: string
 }
+
+export type DatasetSortField =
+  | 'name'
+  | 'description'
+  | 'ingested_at'
+  | 'source_filename'
+  | 'capture_id'
+  | 'camera_count'
+  | 'total_frame_count'
+  | 'max_duration_seconds'
+  | 'scene_category'
+  | 'capture_location'
+
+export type SortOrder = 'asc' | 'desc'
 
 export interface DatasetListResponse {
   items: DatasetSummary[]
@@ -93,38 +123,9 @@ export interface DatasetSearchParams {
   tags?: string[]
   date_from?: string
   date_to?: string
+  capture_id?: string
+  sort?: DatasetSortField
+  order?: SortOrder
   limit?: number
   offset?: number
-}
-
-export type JobStatus = 'pending' | 'running' | 'succeeded' | 'failed'
-
-export interface JobStatusResponse {
-  job_id: string
-  status: JobStatus
-  dataset_id: string | null
-  errors: string[]
-}
-
-export interface KeyInfo {
-  key: string
-  shape: number[]
-  dtype: string
-}
-
-export interface CameraMapping {
-  camera_label: string | null
-  frames_key: string
-  timestamps_key: string
-  // Signed telemetry-row count: positive N = top N rows are telemetry,
-  // negative N = bottom |N| rows, 0 = none.
-  telemetry_row_count: number
-}
-
-export interface UploadInspectionResponse {
-  upload_token: string
-  filename: string
-  keys: KeyInfo[]
-  auto_mapping: CameraMapping[] | null
-  auto_mapping_error: string | null
 }

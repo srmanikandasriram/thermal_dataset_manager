@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Recompute auto-metadata (stats, thumbnails, extra-array inventory...)
+"""Recompute auto-metadata (stats, thumbnails...)
 for already-ingested datasets directly from their zarr stores -- no need to
 re-upload/re-ingest just to backfill a newly added computed field.
 

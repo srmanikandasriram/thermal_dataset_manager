@@ -13,7 +13,7 @@ INGEST_KWARGS = dict(
 def test_rebuild_restores_catalog_from_disk(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=10)
-    metadata = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [metadata] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
 
     # Simulate catalog loss.
     repository.delete(db_session, metadata.auto.dataset_id)
@@ -30,7 +30,7 @@ def test_rebuild_restores_catalog_from_disk(tmp_path, storage, db_session):
 def test_search_by_tag_and_text(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=5)
-    metadata = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [metadata] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
 
     updated = metadata.model_copy(deep=True)
     updated.user.tags = ["outdoor", "day"]

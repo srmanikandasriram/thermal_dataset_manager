@@ -65,27 +65,3 @@ def get_frame(
     buf = io.BytesIO()
     png.save(buf, format="PNG")
     return Response(content=buf.getvalue(), media_type="image/png")
-
-
-@router.get("/{dataset_id}/extra/{key}")
-def get_extra_array(
-    dataset_id: str,
-    key: str,
-    storage: FilesystemDatasetStorage = Depends(get_storage),
-) -> dict:
-    """Read back a source-file array that wasn't mapped to any camera's
-    frames/timestamps at ingest -- preserved verbatim in the zarr store's
-    `extra/` group rather than being dropped."""
-    if not storage.dataset_exists(dataset_id):
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    metadata = storage.read_metadata(dataset_id)
-    if key not in {e.key for e in metadata.auto.extra_arrays}:
-        raise HTTPException(status_code=404, detail="Extra array not found")
-
-    store_path = storage.zarr_store_path(dataset_id)
-    try:
-        array = zarr_store.read_extra_array(store_path, key)
-    except KeyError:
-        raise HTTPException(status_code=404, detail="Extra array not found") from None
-
-    return {"key": key, "shape": list(array.shape), "dtype": str(array.dtype), "values": array.tolist()}

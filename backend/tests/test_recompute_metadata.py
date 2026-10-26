@@ -15,7 +15,7 @@ INGEST_KWARGS = dict(
 def test_recompute_reproduces_equivalent_metadata(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=12)
-    original = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [original] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
 
     recomputed = recompute_metadata(storage, original.auto.dataset_id, db_session, stats_sample_frames=8)
 
@@ -32,7 +32,7 @@ def test_recompute_reproduces_equivalent_metadata(tmp_path, storage, db_session)
 def test_recompute_preserves_user_metadata(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=6)
-    original = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [original] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     dataset_id = original.auto.dataset_id
 
     edited = original.model_copy(deep=True)
@@ -47,21 +47,21 @@ def test_recompute_preserves_user_metadata(tmp_path, storage, db_session):
     assert recomputed.user.tags == ["outdoor"]
 
 
-def test_recompute_preserves_multi_camera_labels(tmp_path, storage, db_session):
+def test_recompute_preserves_split_dataset_identity(tmp_path, storage, db_session):
     src = tmp_path / "two_cam.npz"
     write_multi_camera_npz(src, n_frames=8, n_cameras=2)
-    original = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    for original in ingest_dataset(src, storage, db_session, **INGEST_KWARGS):
+        recomputed = recompute_metadata(storage, original.auto.dataset_id, db_session, stats_sample_frames=8)
 
-    recomputed = recompute_metadata(storage, original.auto.dataset_id, db_session, stats_sample_frames=8)
-
-    assert recomputed.auto.camera_count == 2
-    assert {c.camera_label for c in recomputed.auto.cameras} == {c.camera_label for c in original.auto.cameras}
+        assert recomputed.auto.camera_count == 1
+        assert recomputed.auto.cameras[0].camera_index == original.auto.cameras[0].camera_index
+        assert recomputed.user.capture_id == original.user.capture_id
 
 
 def test_recompute_updates_catalog(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=6)
-    original = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [original] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     dataset_id = original.auto.dataset_id
 
     # Directly corrupt the catalog row to prove recompute repairs it.
@@ -79,7 +79,7 @@ def test_recompute_updates_catalog(tmp_path, storage, db_session):
 def test_recompute_regenerates_thumbnail(tmp_path, storage, db_session):
     src = tmp_path / "capture.npz"
     write_single_camera_npz(src, n_frames=6)
-    original = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    [original] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     dataset_id = original.auto.dataset_id
 
     thumb_path = storage.data_root / "datasets" / dataset_id / "previews" / "camera_0" / "thumbnail.png"
@@ -106,3 +106,18 @@ def test_recompute_all(tmp_path, storage, db_session):
 
     assert succeeded == 3
     assert errors == {}
+
+
+def test_recompute_preserves_other_variables_summary(tmp_path, storage, db_session):
+    import numpy as np
+
+    src = tmp_path / "with_aux.npz"
+    np.savez(
+        src,
+        raw_thr_frames=np.zeros((4, 12, 16), dtype=np.uint16),
+        raw_thr_tstamps=1_700_000_000.0 + np.arange(4) / 30.0,
+        imu=np.arange(8, dtype=np.float32),
+    )
+    [original] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    recomputed = recompute_metadata(storage, original.auto.dataset_id, db_session, stats_sample_frames=8)
+    assert recomputed.auto.other_variables == "imu: shape=(8,), dtype=float32"
