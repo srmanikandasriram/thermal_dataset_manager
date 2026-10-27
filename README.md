@@ -137,3 +137,27 @@ the backend on port 8000 (see `frontend/vite.config.ts`).
 source .venv/bin/activate
 pytest backend/tests
 ```
+
+## Loading videos for downstream processing
+
+`thermal_dataset_manager.loader` reads the library straight off disk (no server needed): the catalog
+finds videos, and frames are only read from the zarr stores when you ask for them.
+
+```python
+from thermal_dataset_manager.loader import Library
+
+lib = Library()   # uses THERMAL_DATA_ROOT
+videos = lib.find(tags=["bunny"], min_frames=500, shape=(512, 640), pipeline_disabled=["temporal_filter"])
+v = videos[0]
+v.frames(slice(100, 200))        # (100, H, W) uint16, image rows only
+v.frames(time=(2.0, 4.0))        # by seconds since the first frame
+v.frames([0, 50, 99])            # arbitrary frame indices
+v.frames(raw=True)               # telemetry rows re-attached, as in the source
+for batch in v.iter_batches(32): ...   # whole video with bounded memory
+v.parse_telemetry(0)             # decoded Boson+ telemetry of one frame
+lib.capture(v.capture_id)        # every camera of the same capture
+```
+
+`find` filters: `q` (full text), `tags`, `capture_id`, `date_from/to`, `scene_category`,
+`capture_location`, `min_frames`, `max_frames`, `min_duration`, `shape`, `has_telemetry`, `gain_mode`,
+`pipeline_enabled`/`pipeline_disabled`, `where=` (any predicate on the metadata) and `limit`.
