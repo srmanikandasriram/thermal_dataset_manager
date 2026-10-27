@@ -209,7 +209,7 @@ def compute_auto_metadata(
                 timestamp_kind=cam.timestamp_kind,
                 stats_sample_frames=stats_sample_frames,
                 compute_stats=compute_stats,
-            )
+            ).model_copy(update={"content_sha256": cam.content_sha256})
             for cam in capture.cameras
         ],
         other_variables=capture.other_variables,

@@ -16,6 +16,7 @@ class DatasetRecord(SQLModel, table=True):
     ingested_at: datetime = Field(index=True)
     source_filename: str = ""
     source_sha256: str = Field(default="", index=True)
+    content_sha256: str | None = Field(default=None, index=True)
     camera_index: int | None = None
     capture_id: str | None = Field(default=None, index=True)
     camera_count: int = 1

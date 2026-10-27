@@ -33,6 +33,7 @@ def upsert_from_metadata(session: Session, metadata: DatasetMetadata) -> None:
     record.ingested_at = metadata.auto.ingested_at
     record.source_filename = metadata.auto.source_filename
     record.source_sha256 = metadata.auto.source_sha256
+    record.content_sha256 = metadata.auto.cameras[0].content_sha256 if metadata.auto.cameras else None
     record.camera_index = metadata.auto.cameras[0].camera_index if metadata.auto.cameras else None
     record.capture_id = metadata.user.capture_id
     record.camera_count = metadata.auto.camera_count
@@ -105,6 +106,18 @@ def find_by_source(session: Session, source_sha256: str, camera_index: int) -> D
         select(DatasetRecord)
         .where(DatasetRecord.source_sha256 == source_sha256)
         .where(DatasetRecord.camera_index == camera_index)
+        .order_by(DatasetRecord.ingested_at.asc())
+    ).first()
+
+
+def find_by_content(session: Session, content_sha256: str | None) -> DatasetRecord | None:
+    """The existing dataset whose raw frames hash to `content_sha256`, if any
+    (oldest match)."""
+    if not content_sha256:
+        return None
+    return session.exec(
+        select(DatasetRecord)
+        .where(DatasetRecord.content_sha256 == content_sha256)
         .order_by(DatasetRecord.ingested_at.asc())
     ).first()
 

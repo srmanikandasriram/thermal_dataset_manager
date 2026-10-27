@@ -69,6 +69,10 @@ class CameraStreamMetadata(BaseModel):
 
     telemetry: CameraTelemetryMetadata | None = None
 
+    # sha256 of the raw frames (see ingest.content_hash); detects the same
+    # video ingested from differently packaged files. None until computed.
+    content_sha256: str | None = None
+
 
 class AutoMetadata(BaseModel):
     """Computed at ingest time (or recomputed later). Never edited by users;

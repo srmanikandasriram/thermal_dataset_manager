@@ -2,6 +2,7 @@ from pathlib import Path
 
 import numpy as np
 
+from thermal_dataset_manager.ingest.content_hash import frames_content_sha256
 from thermal_dataset_manager.ingest.key_registry import CameraKeyPair
 from thermal_dataset_manager.ingest.readers.h5_reader import H5Source
 from thermal_dataset_manager.ingest.readers.npz_reader import NpzSource
@@ -63,6 +64,7 @@ def build_camera_capture(
 ) -> NormalizedCameraCapture:
     frames = _squeeze_trailing_singleton_dims(source.read(pair.frames_key))
     timestamps = source.read(pair.timestamps_key).astype("float64")
+    content_sha256 = frames_content_sha256(frames) if frames.ndim == 3 else None
     if frames.ndim == 3:
         # Split the telemetry rows off the raw frames. (Other shapes are left
         # alone for validation to reject.) A telemetry_row_count at least as
@@ -79,6 +81,7 @@ def build_camera_capture(
         timestamps=timestamps,
         telemetry_row_count=telemetry_row_count,
         timestamp_kind=infer_timestamp_kind(timestamps),
+        content_sha256=content_sha256,
     )
 
 

@@ -45,6 +45,7 @@ def recompute_metadata(
     store_path = storage.zarr_store_path(dataset_id)
     root = zarr_store.open_group(store_path)
 
+    previous_hashes = {c.camera_index: c.content_sha256 for c in existing.auto.cameras}
     cameras = []
     for camera_index in zarr_store.camera_indices(store_path):
         cam_group = root[f"camera_{camera_index}"]
@@ -58,7 +59,7 @@ def recompute_metadata(
                 telemetry_row_count=int(cam_group.attrs["telemetry_row_count"]),
                 timestamp_kind=cam_group.attrs["timestamp_kind"],
                 stats_sample_frames=stats_sample_frames,
-            )
+            ).model_copy(update={"content_sha256": previous_hashes.get(camera_index)})
         )
 
     auto = AutoMetadata(

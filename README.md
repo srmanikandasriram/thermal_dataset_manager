@@ -84,6 +84,12 @@ is decoded, so the camera-key mapping/normalization above does not affect it). S
 byte-identical to an already-ingested capture is rejected with an error naming the existing
 dataset (id, name, source filename, ingest time) rather than creating a redundant copy.
 
+Each camera is also deduplicated on a **content hash** of its raw frames (telemetry rows included,
+independent of file compression or `--telemetry-rows`), so the same video packaged differently
+(e.g. `.npz` and `.npz.zst`) is caught too. Datasets ingested before this existed get their hash
+from `python backend/scripts/backfill_content_hash_cli.py`, which also lists any datasets that hold
+identical frames.
+
 ## Maintenance
 
 All three are safe to run at any time (they never touch the immutable raw zarr data) and work

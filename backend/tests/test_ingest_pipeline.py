@@ -281,7 +281,7 @@ def test_ingested_dataset_readable_from_disk(tmp_path, storage, db_session):
 def _multi_camera_arrays(second_dtype=np.uint16, n_frames=4):
     arrays = {}
     for i, dtype in enumerate([np.uint16, second_dtype]):
-        arrays[f"raw_thr_frames_{i}"] = np.zeros((n_frames, 12, 16), dtype=dtype)
+        arrays[f"raw_thr_frames_{i}"] = np.full((n_frames, 12, 16), i, dtype=dtype)
         arrays[f"raw_thr_tstamps_{i}"] = 1_700_000_000.0 + np.arange(n_frames) / 30.0
     return arrays
 
@@ -390,3 +390,43 @@ def test_failure_on_later_camera_keeps_earlier_one_and_rerun_resumes(tmp_path, s
     with pytest.raises(IngestValidationError):
         ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
     assert len(list(storage.list_dataset_ids())) == 1
+
+
+def test_ingest_rejects_same_frames_in_differently_packaged_file(tmp_path, storage, db_session):
+    plain = tmp_path / "capture.npz"
+    packed = tmp_path / "capture_copy.npz.zst"
+    write_single_camera_npz(plain, n_frames=8, seed=0)
+    write_single_camera_npz_zst(packed, n_frames=8)
+    [first] = ingest_dataset(plain, storage, db_session, **INGEST_KWARGS)
+    assert first.auto.cameras[0].content_sha256
+
+    with pytest.raises(DuplicateDatasetError) as excinfo:
+        ingest_dataset(packed, storage, db_session, **INGEST_KWARGS)
+    assert excinfo.value.existing_dataset_id == first.auto.dataset_id
+    assert "Frame content" in str(excinfo.value)
+    assert len(list(storage.list_dataset_ids())) == 1
+
+
+def test_content_hash_is_independent_of_telemetry_row_split(tmp_path, storage, db_session):
+    a = tmp_path / "a.npz"
+    write_single_camera_npz(a, n_frames=8)
+    [top] = ingest_dataset(a, storage, db_session, **INGEST_KWARGS)
+    with pytest.raises(DuplicateDatasetError):
+        ingest_dataset(a, storage, db_session, **{**INGEST_KWARGS, "default_telemetry_row_count": 0})
+    found = repository.find_by_content(db_session, top.auto.cameras[0].content_sha256)
+    assert found.dataset_id == top.auto.dataset_id
+
+
+@pytest.mark.parametrize("trc", [TELEMETRY_ROWS, 0, -TELEMETRY_ROWS])
+def test_stored_hash_matches_hash_computed_at_ingest(tmp_path, storage, db_session, trc):
+    from thermal_dataset_manager.ingest.content_hash import stored_camera_content_sha256
+
+    src = tmp_path / "capture.npz"
+    write_single_camera_npz(src, n_frames=8)
+    [md] = ingest_dataset(src, storage, db_session, **{**INGEST_KWARGS, "default_telemetry_row_count": trc})
+    cam = md.auto.cameras[0]
+    group = zarr_store.open_group(storage.zarr_store_path(md.auto.dataset_id))[f"camera_{cam.camera_index}"]
+    stored = stored_camera_content_sha256(
+        group["counts"], group["telemetry"] if trc else None, cam.telemetry_row_count
+    )
+    assert stored == cam.content_sha256

@@ -49,6 +49,7 @@ class NormalizedCameraCapture:
     timestamps: np.ndarray  # (n_frames,) float64
     telemetry_row_count: int
     timestamp_kind: TimestampKind
+    content_sha256: str | None = None  # of the raw frames, before the telemetry split
 
 
 @dataclass

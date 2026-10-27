@@ -26,6 +26,7 @@ _DATASETRECORD_ADDED_COLUMNS = {
     "source_sha256": "VARCHAR NOT NULL DEFAULT ''",
     "camera_index": "INTEGER",
     "capture_id": "VARCHAR",
+    "content_sha256": "VARCHAR",
 }
 
 

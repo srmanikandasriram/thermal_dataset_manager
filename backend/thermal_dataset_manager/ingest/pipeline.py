@@ -33,14 +33,14 @@ class DuplicateDatasetError(ValueError):
     """Raised when a source file byte-identical to an already-ingested one is
     submitted again. Carries the existing dataset's identifying details."""
 
-    def __init__(self, source_sha256: str, existing: "repository.DatasetRecord") -> None:
+    def __init__(self, source_sha256: str, existing: "repository.DatasetRecord", *, by_content: bool = False) -> None:
         self.source_sha256 = source_sha256
         self.existing_dataset_id = existing.dataset_id
         self.existing_name = existing.name
         self.existing_source_filename = existing.source_filename
         self.existing_ingested_at = existing.ingested_at
         super().__init__(
-            f"Source file is a duplicate (sha256 {source_sha256}) of already-ingested dataset "
+            f"{'Frame content' if by_content else 'Source file'} is a duplicate (sha256 {source_sha256}) of already-ingested dataset "
             f"{existing.dataset_id!r} (name {existing.name!r}, from file "
             f"{existing.source_filename!r}, ingested {existing.ingested_at.isoformat()})"
         )
@@ -161,12 +161,24 @@ def write_raw_dataset(
         # memory is a single camera's frames. A failure partway leaves the
         # earlier cameras ingested; re-running skips them (duplicate check).
         results: list[DatasetMetadata] = []
+        content_duplicate = None
         for pair in new_pairs:
             single = build_normalized_capture_from_pairs(
                 source, [pair], default_telemetry_row_count, other_variables
             )
-            validate(single)
             cam = single.cameras[0]
+            # Same video packaged differently (e.g. .npz vs .npz.zst) has a
+            # different file hash but the same frame content.
+            twin = repository.find_by_content(db_session, cam.content_sha256)
+            if twin is not None:
+                logger.warning(
+                    "%s camera %d has the same frames as dataset %s; skipping",
+                    source_path, pair.camera_index, twin.dataset_id,
+                )
+                content_duplicate = (cam.content_sha256, twin)
+                del single, cam
+                continue
+            validate(single)
             dataset_id = str(ULID())
 
             auto_metadata = metadata_compute.compute_auto_metadata(
@@ -207,6 +219,8 @@ def write_raw_dataset(
             results.append(metadata)
             del single, cam  # release this camera's frames before loading the next
 
+    if not results and content_duplicate is not None:
+        raise DuplicateDatasetError(*content_duplicate, by_content=True)
     return results
 
 
