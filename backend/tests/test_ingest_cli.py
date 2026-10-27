@@ -193,3 +193,22 @@ def test_move_duplicates_requires_move_ingested_to(monkeypatch, tmp_path):
 
     with pytest.raises(SystemExit):
         run("--move-duplicates", str(tmp_path))
+
+
+def test_name_from_path_uses_parent_folders_and_file_stem(monkeypatch, tmp_path):
+    src = tmp_path / "run1" / "take3" / "thermal_video.npz"
+    src.parent.mkdir(parents=True)
+    write_single_camera_npz(src, n_frames=4)
+    seen: list[dict] = []
+
+    assert _run(monkeypatch, tmp_path, ["--name-from-path", "2", str(src)], seen) == 0
+    assert seen[0]["name"] == "run1_take3_thermal_video"
+
+    seen.clear()
+    assert _run(monkeypatch, tmp_path, [str(src)], seen) == 0
+    assert seen[0]["name"] is None
+
+
+def test_name_from_path_handles_zst_extension():
+    assert cli.name_from_path(Path("/a/b/c/clip.npz.zst"), 1) == "c_clip"
+    assert cli.name_from_path(Path("/a/b/c/clip.npz.zst"), 0) == "clip"

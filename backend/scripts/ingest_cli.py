@@ -6,6 +6,7 @@ Usage:
     python backend/scripts/ingest_cli.py --telemetry-rows 0 no_telemetry_capture.npz
     python backend/scripts/ingest_cli.py --capture run42 cam_a.npz cam_b.npz
     python backend/scripts/ingest_cli.py /path/to/captures/        # whole folder, recursively
+    python backend/scripts/ingest_cli.py --name-from-path 2 /data/captures/   # 'run1_take3_thermal_video'
     python backend/scripts/ingest_cli.py --move-ingested-to /data/ingested /data/to_be_ingested
 
 A multi-camera file is split into one dataset per camera.
@@ -54,6 +55,17 @@ def expand_paths(paths: list[Path], exclude_dir: Path | None = None) -> list[tup
     if exclude_dir is not None:
         expanded = [(p, b) for p, b in expanded if exclude_dir not in p.resolve().parents]
     return expanded
+
+
+def name_from_path(path: Path, n_parents: int) -> str:
+    """'<grandparent>_<parent>_<stem>' style name: the last `n_parents` folder
+    names above the file, then the file name without its format extension."""
+    stem = path.name
+    for suffix in SOURCE_SUFFIXES:
+        if stem.lower().endswith(suffix):
+            stem = stem[: -len(suffix)]
+            break
+    return "_".join([*path.resolve().parent.parts[-n_parents:], stem] if n_parents > 0 else [stem])
 
 
 def move_source(path: Path, base: Path, dest_root: Path) -> bool:
@@ -107,6 +119,17 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--name-from-path",
+        type=int,
+        default=None,
+        metavar="N",
+        help=(
+            "Name each dataset after its file's path instead of its file name: the N parent "
+            "folder names plus the file name (no extension), joined with '_'. E.g. N=2 turns "
+            ".../run1/take3/thermal_video.npz into 'run1_take3_thermal_video'."
+        ),
+    )
+    parser.add_argument(
         "--move-ingested-to",
         type=Path,
         default=None,
@@ -146,6 +169,7 @@ def main() -> int:
                     zarr_target_chunk_bytes=settings.zarr_target_chunk_bytes,
                     stats_sample_frames=settings.stats_sample_frames,
                     capture_id=args.capture,
+                    name=name_from_path(path, args.name_from_path) if args.name_from_path is not None else None,
                 )
             except IngestValidationError as e:
                 print(f"FAILED  {path}:", file=sys.stderr)

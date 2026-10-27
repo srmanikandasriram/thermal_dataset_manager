@@ -57,3 +57,8 @@ def test_unrecognized_keys_raise():
 def test_unmatched_frames_key_raises():
     with pytest.raises(KeyRegistryError):
         discover_camera_keys(["raw_thr_frames_0", "raw_thr_tstamps_1"])
+
+
+def test_older_raw_images_naming():
+    [pair] = discover_camera_keys(["raw_images", "raw_tstamps", "total_frames", "fps"])
+    assert (pair.frames_key, pair.timestamps_key) == ("raw_images", "raw_tstamps")

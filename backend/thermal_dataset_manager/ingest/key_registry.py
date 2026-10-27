@@ -20,6 +20,11 @@ KEY_PATTERNS: list[tuple[re.Pattern[str], re.Pattern[str]]] = [
         re.compile(r"^raw_thr_frames(?:_(?P<suffix>\w+))?$"),
         re.compile(r"^raw_thr_tstamps(?:_(?P<suffix>\w+))?$"),
     ),
+    # Older captures of the same Boson recorder.
+    (
+        re.compile(r"^raw_images(?:_(?P<suffix>\w+))?$"),
+        re.compile(r"^raw_tstamps(?:_(?P<suffix>\w+))?$"),
+    ),
 ]
 
 # Suffix used internally for a capture with no multi-camera suffix at all.

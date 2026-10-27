@@ -70,8 +70,8 @@ def _source_stem(source_path: Path) -> str:
     return source_path.stem
 
 
-def _dataset_name(source_path: Path, cam, multi_camera: bool) -> str:
-    stem = _source_stem(source_path)
+def _dataset_name(source_path: Path, cam, multi_camera: bool, base_name: str | None = None) -> str:
+    stem = base_name or _source_stem(source_path)
     if not multi_camera:
         return stem
     suffix = cam.camera_label or f"cam{cam.camera_index}"
@@ -87,6 +87,7 @@ def write_raw_dataset(
     zarr_target_chunk_bytes: int,
     camera_mapping: list[CameraKeyPair] | None = None,
     capture_id: str | None = None,
+    name: str | None = None,
 ) -> list[DatasetMetadata]:
     """Validate a source capture file and commit it into the canonical Zarr
     layout. Deliberately does *not* scan pixel data for stats or render
@@ -193,7 +194,7 @@ def write_raw_dataset(
             )
             metadata = DatasetMetadata(
                 auto=auto_metadata,
-                user=UserMetadata(name=_dataset_name(source_path, cam, multi_camera), capture_id=capture_id),
+                user=UserMetadata(name=_dataset_name(source_path, cam, multi_camera, name), capture_id=capture_id),
             )
 
             zarr_store.write(
@@ -234,6 +235,7 @@ def ingest_dataset(
     stats_sample_frames: int,
     camera_mapping: list[CameraKeyPair] | None = None,
     capture_id: str | None = None,
+    name: str | None = None,
 ) -> list[DatasetMetadata]:
     """Convenience wrapper composing write_raw_dataset + recompute_metadata
     into one synchronous call -- one fully-computed dataset per camera in the
@@ -247,6 +249,7 @@ def ingest_dataset(
         zarr_target_chunk_bytes=zarr_target_chunk_bytes,
         camera_mapping=camera_mapping,
         capture_id=capture_id,
+        name=name,
     )
     return [
         recompute_metadata(storage, m.auto.dataset_id, db_session, stats_sample_frames=stats_sample_frames)
