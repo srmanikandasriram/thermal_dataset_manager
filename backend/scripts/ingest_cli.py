@@ -5,24 +5,85 @@ Usage:
     python backend/scripts/ingest_cli.py <path-to-capture-file> [<more files>...]
     python backend/scripts/ingest_cli.py --telemetry-rows 0 no_telemetry_capture.npz
     python backend/scripts/ingest_cli.py --capture run42 cam_a.npz cam_b.npz
+    python backend/scripts/ingest_cli.py /path/to/captures/        # whole folder, recursively
+    python backend/scripts/ingest_cli.py --move-ingested-to /data/ingested /data/to_be_ingested
 
 A multi-camera file is split into one dataset per camera.
+
+--move-ingested-to DIR moves each source file into DIR once it has been ingested
+successfully, keeping its path relative to the folder (or file's folder) it was
+given from. Files that are skipped or fail stay where they are, so what is left
+behind is exactly what still needs attention. Add --move-duplicates to also move
+files whose content is already ingested.
 """
 
 import argparse
+import shutil
 import sys
 from pathlib import Path
 
 from thermal_dataset_manager.catalog.db import get_session, init_db, make_engine
 from thermal_dataset_manager.config import get_settings
-from thermal_dataset_manager.ingest.pipeline import DuplicateDatasetError, ingest_dataset
+from thermal_dataset_manager.ingest.key_registry import KeyRegistryError
+from thermal_dataset_manager.ingest.pipeline import (
+    DuplicateDatasetError,
+    UnsupportedSourceFormatError,
+    ingest_dataset,
+)
 from thermal_dataset_manager.ingest.validation import IngestValidationError
 from thermal_dataset_manager.storage.filesystem import FilesystemDatasetStorage
 
 
+SOURCE_SUFFIXES = (".npz.zst", ".npz", ".h5", ".hdf5")
+
+
+def expand_paths(paths: list[Path], exclude_dir: Path | None = None) -> list[tuple[Path, Path]]:
+    """(file, base) pairs. Files are kept as given (base = their folder);
+    directories are searched recursively for supported source files (sorted,
+    so runs are reproducible; base = that directory). Anything under
+    `exclude_dir` (e.g. the --move-ingested-to destination) is left out."""
+    expanded: list[tuple[Path, Path]] = []
+    for path in paths:
+        if path.is_dir():
+            found = sorted(
+                p for p in path.rglob("*") if p.is_file() and p.name.lower().endswith(SOURCE_SUFFIXES)
+            )
+            expanded.extend((p, path) for p in found)
+        else:
+            expanded.append((path, path.parent))
+    if exclude_dir is not None:
+        expanded = [(p, b) for p, b in expanded if exclude_dir not in p.resolve().parents]
+    return expanded
+
+
+def move_source(path: Path, base: Path, dest_root: Path) -> bool:
+    """Move an ingested source file to dest_root/<path relative to base>.
+    Never overwrites; returns False (after saying why) if it could not move."""
+    target = dest_root / path.relative_to(base)
+    if target.exists():
+        print(f"NOT MOVED  {path}: {target} already exists", file=sys.stderr)
+        return False
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(path), str(target))
+    except OSError as e:
+        print(f"NOT MOVED  {path}: {e}", file=sys.stderr)
+        return False
+    print(f"MOVED   {path} -> {target}", flush=True)
+    return True
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description="Ingest one or more raw thermal capture files.")
-    parser.add_argument("paths", nargs="+", type=Path, help="Source .npz/.npz.zst/.h5 files")
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        type=Path,
+        help=(
+            "Source .npz/.npz.zst/.h5 files, or directories to search recursively for them "
+            "(other file types are ignored)"
+        ),
+    )
     parser.add_argument(
         "--telemetry-rows",
         type=int,
@@ -45,7 +106,25 @@ def main() -> int:
             "file are grouped automatically under a generated id when this is omitted."
         ),
     )
+    parser.add_argument(
+        "--move-ingested-to",
+        type=Path,
+        default=None,
+        metavar="DIR",
+        help=(
+            "After a file is ingested successfully, move it to DIR (keeping its path relative to "
+            "the folder it was found under). Skipped and failed files are left in place."
+        ),
+    )
+    parser.add_argument(
+        "--move-duplicates",
+        action="store_true",
+        help="With --move-ingested-to, also move files that were already ingested (duplicates).",
+    )
     args = parser.parse_args()
+    if args.move_duplicates and args.move_ingested_to is None:
+        parser.error("--move-duplicates requires --move-ingested-to")
+    move_to = args.move_ingested_to.resolve() if args.move_ingested_to is not None else None
 
     settings = get_settings()
     telemetry_row_count = (
@@ -57,7 +136,7 @@ def main() -> int:
 
     exit_code = 0
     with get_session(engine) as session:
-        for path in args.paths:
+        for path, base in expand_paths(args.paths, exclude_dir=move_to):
             try:
                 datasets = ingest_dataset(
                     path,
@@ -81,11 +160,26 @@ def main() -> int:
                 print(f"    source:   {e.existing_source_filename}", file=sys.stderr)
                 print(f"    ingested: {e.existing_ingested_at.isoformat()}", file=sys.stderr)
                 print(f"    sha256:   {e.source_sha256}", file=sys.stderr)
+                # Not a failure: re-running over a folder is expected to hit these.
+                if move_to is not None and args.move_duplicates and not move_source(path, base, move_to):
+                    exit_code = 1
+                continue
+            except (KeyRegistryError, UnsupportedSourceFormatError) as e:
+                print(f"SKIPPED  {path}: {e}", file=sys.stderr)
+                exit_code = 1
+                continue
+            except Exception as e:  # noqa: BLE001 - one bad file shouldn't abort a batch run
+                print(f"FAILED  {path}: {type(e).__name__}: {e}", file=sys.stderr)
                 exit_code = 1
                 continue
             for metadata in datasets:
                 capture = f", capture {metadata.user.capture_id}" if metadata.user.capture_id else ""
-                print(f"OK      {path} -> dataset {metadata.auto.dataset_id} ({metadata.user.name}{capture})")
+                print(
+                    f"OK      {path} -> dataset {metadata.auto.dataset_id} ({metadata.user.name}{capture})",
+                    flush=True,
+                )
+            if move_to is not None and not move_source(path, base, move_to):
+                exit_code = 1
 
     return exit_code
 

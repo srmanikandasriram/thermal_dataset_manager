@@ -47,6 +47,12 @@ python backend/scripts/ingest_cli.py path/to/capture.npz [more_captures...]
 python backend/scripts/ingest_cli.py --telemetry-rows 0 path/to/capture.npz
 ```
 
+To keep track of what has been ingested, add `--move-ingested-to DIR`: each source file is moved into
+`DIR` (keeping its path relative to the folder you gave) once it ingests successfully. Skipped and
+failed files stay where they are, so what's left behind is what still needs attention. Add
+`--move-duplicates` to also move files that were already ingested. Don't move or rename files yourself
+while a run is in progress; it works from the list of files it found at startup.
+
 A source file with several cameras is split at ingest into **one dataset per camera**, so a dataset
 is always a single thermal video. Its Zarr group keeps the camera's index from the source file
 (`camera_1` for `raw_thr_frames_1`). The datasets from one file share a `capture_id` (generated); use

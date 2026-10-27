@@ -61,11 +61,21 @@ def detect_source_format(path: Path) -> SourceFormat:
     raise UnsupportedSourceFormatError(f"Unsupported source file extension: {path.name}")
 
 
+def _source_stem(source_path: Path) -> str:
+    """File name without its format extension (".npz.zst" counts as one)."""
+    name = source_path.name
+    for suffix in (".npz.zst", ".npz", ".h5", ".hdf5"):
+        if name.lower().endswith(suffix):
+            return name[: -len(suffix)]
+    return source_path.stem
+
+
 def _dataset_name(source_path: Path, cam, multi_camera: bool) -> str:
+    stem = _source_stem(source_path)
     if not multi_camera:
-        return source_path.stem
+        return stem
     suffix = cam.camera_label or f"cam{cam.camera_index}"
-    return f"{source_path.stem}_{suffix}"
+    return f"{stem}_{suffix}"
 
 
 def write_raw_dataset(
