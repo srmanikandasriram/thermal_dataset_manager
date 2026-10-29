@@ -26,6 +26,7 @@ SortField = Literal[
     "max_duration_seconds",
     "scene_category",
     "capture_location",
+    "random",
 ]
 
 
@@ -59,10 +60,11 @@ def list_datasets(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     capture_id: str | None = None,
-    sort: SortField = "ingested_at",
+    sort: SortField = "random",
     order: Literal["asc", "desc"] = "desc",
     limit: int = 50,
     offset: int = 0,
+    seed: int = 0,
     session: Session = Depends(get_db_session),
 ) -> DatasetListResponse:
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
@@ -77,6 +79,7 @@ def list_datasets(
         descending=order == "desc",
         limit=limit,
         offset=offset,
+        seed=seed,
     )
     total = repository.count(session, q=q, tags=tag_list, date_from=date_from, date_to=date_to, capture_id=capture_id)
     items = [

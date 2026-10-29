@@ -108,6 +108,7 @@ export type DatasetSortField =
   | 'max_duration_seconds'
   | 'scene_category'
   | 'capture_location'
+  | 'random'
 
 export type SortOrder = 'asc' | 'desc'
 
@@ -126,6 +127,7 @@ export interface DatasetSearchParams {
   capture_id?: string
   sort?: DatasetSortField
   order?: SortOrder
+  seed?: number
   limit?: number
   offset?: number
 }

@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime
 
 from sqlalchemy import func, nulls_last, text
@@ -189,6 +190,13 @@ SORT_COLUMNS = {
     "capture_location": DatasetRecord.capture_location,
 }
 DEFAULT_SORT = "ingested_at"
+# Not a column: a pseudo-random order that is fixed for a given seed, so paging
+# through it neither repeats nor skips rows.
+RANDOM_SORT = "random"
+
+
+def _random_key(seed: int, dataset_id: str) -> str:
+    return hashlib.sha256(f"{seed}:{dataset_id}".encode()).hexdigest()
 
 
 def search(
@@ -203,10 +211,16 @@ def search(
     descending: bool = True,
     limit: int = 50,
     offset: int = 0,
+    seed: int = 0,
 ) -> list[DatasetRecord]:
     statement = _filtered_query(session, q=q, tags=tags, date_from=date_from, date_to=date_to, capture_id=capture_id)
     if statement is None:
         return []
+    if sort_by == RANDOM_SORT:
+        # The catalog is small (thousands of rows), so shuffle in Python rather
+        # than rely on a SQL random() that would change between page requests.
+        records = sorted(session.exec(statement).all(), key=lambda r: _random_key(seed, r.dataset_id))
+        return records[offset : offset + limit]
     column = SORT_COLUMNS.get(sort_by, SORT_COLUMNS[DEFAULT_SORT])
     primary = column.desc() if descending else column.asc()
     # NULLs always last; dataset_id as a stable tiebreak so pagination doesn't

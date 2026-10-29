@@ -26,6 +26,7 @@ export function listDatasets(params: DatasetSearchParams): Promise<DatasetListRe
   if (params.capture_id) search.set('capture_id', params.capture_id)
   if (params.sort) search.set('sort', params.sort)
   if (params.order) search.set('order', params.order)
+  if (params.seed !== undefined) search.set('seed', String(params.seed))
   search.set('limit', String(params.limit ?? 50))
   search.set('offset', String(params.offset ?? 0))
   return request(`/api/datasets?${search.toString()}`)

@@ -13,6 +13,10 @@ const PAGE_SIZE = 50
 const VIEW_STORAGE_KEY = 'tdm.browseView'
 const COLUMNS_STORAGE_KEY = 'tdm.browseColumns'
 
+function newSeed(): number {
+  return Math.floor(Math.random() * 2 ** 31)
+}
+
 type ViewMode = 'grid' | 'list'
 
 function initialView(): ViewMode {
@@ -41,8 +45,10 @@ export function BrowsePage({ onSelectDataset }: { onSelectDataset: (id: string) 
   const [q, setQ] = useState('')
   const [selectedTags, setSelectedTags] = useState<string[]>([])
   const [view, setView] = useState<ViewMode>(initialView)
-  const [sort, setSort] = useState<DatasetSortField>('ingested_at')
+  const [sort, setSort] = useState<DatasetSortField>('random')
   const [order, setOrder] = useState<SortOrder>('desc')
+  // fixed for the page's lifetime (until Shuffle) so "Load more" continues the same random order
+  const [seed, setSeed] = useState(newSeed)
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(initialColumns)
 
   function chooseView(next: ViewMode) {
@@ -59,6 +65,11 @@ export function BrowsePage({ onSelectDataset }: { onSelectDataset: (id: string) 
     setOrder(nextOrder)
   }
 
+  function shuffle() {
+    setSort('random')
+    setSeed(newSeed())
+  }
+
   function toggleColumn(key: ColumnKey, visible: boolean) {
     setVisibleColumns((prev) => {
       const next = new Set(prev)
@@ -73,19 +84,19 @@ export function BrowsePage({ onSelectDataset }: { onSelectDataset: (id: string) 
     })
     // if the column driving the current sort is hidden, fall back to default
     if (!visible && key === sort) {
-      setSort('ingested_at')
-      setOrder('desc')
+      setSort('random')
     }
   }
 
   const { data, isLoading, error, hasNextPage, fetchNextPage, isFetchingNextPage } = useInfiniteQuery({
-    queryKey: ['datasets', q, selectedTags, sort, order],
+    queryKey: ['datasets', q, selectedTags, sort, order, seed],
     queryFn: ({ pageParam }) =>
       listDatasets({
         q: q || undefined,
         tags: selectedTags.length ? selectedTags : undefined,
         sort,
         order,
+        seed,
         limit: PAGE_SIZE,
         offset: pageParam,
       }),
@@ -116,6 +127,9 @@ export function BrowsePage({ onSelectDataset }: { onSelectDataset: (id: string) 
       <div className="browse-page-toolbar">
         <SearchBar value={q} onChange={setQ} />
         {view === 'list' && <ColumnPicker visibleColumns={visibleColumns} onToggle={toggleColumn} />}
+        <button type="button" onClick={shuffle} title="Show datasets in a new random order">
+          Shuffle
+        </button>
         <div className="view-toggle" role="group" aria-label="View mode">
           <button
             type="button"

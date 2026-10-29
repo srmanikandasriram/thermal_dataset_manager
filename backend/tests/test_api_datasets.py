@@ -207,3 +207,25 @@ def test_recompute_dataset_metadata_endpoint(client, tmp_path):
 def test_recompute_dataset_metadata_404(client):
     resp = client.post("/api/datasets/does-not-exist/recompute-metadata")
     assert resp.status_code == 404
+
+
+def test_default_sort_is_random_but_stable_per_seed(client, tmp_path):
+    for i in range(8):
+        src = tmp_path / f"cap_{i}.npz"
+        write_single_camera_npz(src, n_frames=5, seed=i)
+        with get_session(client.engine) as session:
+            ingest_dataset(src, client.storage, session, **INGEST_KWARGS)
+
+    def ids(query):
+        return [i["dataset_id"] for i in client.get(f"/api/datasets?{query}").json()["items"]]
+
+    whole = ids("seed=1&limit=100")
+    assert ids("seed=1&limit=100") == whole  # same seed -> same order
+    assert ids("seed=2&limit=100") != whole  # other seed -> different order
+    assert whole != ids("sort=ingested_at&order=desc&limit=100")  # not just the recency order
+
+    # paging through one seed neither repeats nor skips rows, and matches the full order
+    paged = []
+    for offset in (0, 3, 6):
+        paged += ids(f"seed=1&limit=3&offset={offset}")
+    assert paged == whole
