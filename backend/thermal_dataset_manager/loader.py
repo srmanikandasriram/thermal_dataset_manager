@@ -6,7 +6,7 @@ read until you ask for frames.
 
     from thermal_dataset_manager.loader import Library
 
-    lib = Library()                                   # uses THERMAL_DATA_ROOT
+    lib = Library("/path/to/data_root")               # always pass the data root explicitly
     videos = lib.find(tags=["bunny"], min_frames=500, pipeline_disabled=["temporal_filter"])
     for v in videos:
         print(v.name, v.n_frames, v.shape, v.fps)
@@ -190,8 +190,23 @@ class Video:
 
 
 class Library:
+    """Read-only view of a data root. Pass `data_root` explicitly in downstream
+    code; omitting it falls back to THERMAL_DATA_ROOT / ./datasets (what the
+    server uses). A root without a catalog is an error, never silently empty."""
+
     def __init__(self, data_root: Path | str | None = None) -> None:
         settings = Settings(data_root=Path(data_root)) if data_root is not None else get_settings()
+        if not settings.data_root.is_dir():
+            raise FileNotFoundError(f"data root {settings.data_root} does not exist")
+        prefix = "sqlite:///"
+        if settings.catalog_db.startswith(prefix):
+            catalog = Path(settings.catalog_db[len(prefix):])
+            # sqlite would otherwise create an empty catalog at a mistyped path
+            if not catalog.is_file():
+                raise FileNotFoundError(
+                    f"no catalog at {catalog}: is {settings.data_root} the right data root? "
+                    "(ingest_cli.py creates it)"
+                )
         self.storage = FilesystemDatasetStorage(settings.data_root)
         self._engine = make_engine(settings.catalog_db)
 

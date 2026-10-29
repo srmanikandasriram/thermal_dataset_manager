@@ -140,13 +140,24 @@ pytest backend/tests
 
 ## Loading videos for downstream processing
 
+Other projects only need the core install (numpy, zarr, SQLAlchemy/pydantic; no server or ingest stack):
+
+```bash
+pip install "thermal-dataset-manager @ /path/to/this/repo"      # query + load
+pip install -e ".[dev]"                                          # everything, for working on this repo
+```
+
+Extras: `ingest` (`ingest_cli.py`), `server` (the API; includes `ingest`), `dev` (server + test tools).
+Downstream code should treat the data root as read-only. `Library` raises if the root has no catalog,
+instead of creating an empty one.
+
 `thermal_dataset_manager.loader` reads the library straight off disk (no server needed): the catalog
 finds videos, and frames are only read from the zarr stores when you ask for them.
 
 ```python
 from thermal_dataset_manager.loader import Library
 
-lib = Library()   # uses THERMAL_DATA_ROOT
+lib = Library("/mnt/storage/thermal_videos_datasets")   # always pass the data root explicitly
 videos = lib.find(tags=["bunny"], min_frames=500, shape=(512, 640), pipeline_disabled=["temporal_filter"])
 v = videos[0]
 v.frames(slice(100, 200))        # (100, H, W) uint16, image rows only

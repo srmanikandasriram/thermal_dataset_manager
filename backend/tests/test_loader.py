@@ -72,3 +72,13 @@ def test_raw_reattaches_telemetry_rows(tmp_path, storage, db_session, trc):
     [v] = library.find()
     assert np.array_equal(v.frames(raw=True), original)
     assert v.telemetry_rows().shape == (5, 2, original.shape[2])
+
+
+def test_library_refuses_a_root_without_a_catalog(tmp_path):
+    with pytest.raises(FileNotFoundError, match="does not exist"):
+        Library(tmp_path / "typo")
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    with pytest.raises(FileNotFoundError, match="no catalog"):
+        Library(empty)
+    assert not (empty / "catalog.sqlite").exists()  # and it must not create one
