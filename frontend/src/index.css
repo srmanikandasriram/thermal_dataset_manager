@@ -558,3 +558,14 @@ dd {
   margin-top: 0.75rem;
 }
 
+
+.dataset-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  user-select: all;
+  word-break: break-all;
+}
+
+.copy-id-button {
+  padding: 0 0.5rem;
+  font-size: 0.8em;
+}

@@ -44,6 +44,28 @@ function TelemetryRows({ telemetry }: { telemetry: CameraTelemetryMetadata }) {
   )
 }
 
+/** The dataset ID with a copy button, for use with the loader/API. */
+function DatasetId({ id }: { id: string }) {
+  const [copied, setCopied] = useState(false)
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(id)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1500)
+    } catch {
+      // clipboard needs a secure context; the ID is still selectable text
+    }
+  }
+  return (
+    <>
+      <code className="dataset-id">{id}</code>{' '}
+      <button type="button" className="copy-id-button" onClick={copy}>
+        {copied ? 'Copied' : 'Copy'}
+      </button>
+    </>
+  )
+}
+
 export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; onBack: () => void }) {
   const queryClient = useQueryClient()
   const [activeCameraIndex, setActiveCameraIndex] = useState(0)
@@ -108,6 +130,10 @@ export function DatasetDetailPage({ datasetId, onBack }: { datasetId: string; on
             </div>
             {recompute.isError && <p className="error">Recompute failed: {(recompute.error as Error).message}</p>}
             <dl>
+              <dt>Dataset ID</dt>
+              <dd>
+                <DatasetId id={auto.dataset_id} />
+              </dd>
               <dt>Source file</dt>
               <dd>{auto.source_filename}</dd>
               {data.user.capture_id && (
