@@ -1,36 +1,42 @@
-"""Zarr v2 read/write helpers.
+"""Zarr read/write helpers (new data is written in zarr format 3; zarr format 2 stores
+written by earlier versions are still read transparently).
 
 Layout (one group per dataset; a dataset is a single camera stream, so there is
 exactly one camera subgroup, numbered by the camera's index in the source file):
 
     raw.zarr/
-        .zattrs: {schema_version, source_format, camera_count}
+        zarr.json attributes: {schema_version, source_format, camera_count}
         camera_<n>/
             counts      (n_frames, H, W) uint16   -- image rows only
             telemetry   (n_frames, R, W) uint16   -- the stripped telemetry rows, verbatim,
                                                      top-to-bottom; absent when R == 0
             timestamps  (n_frames,) float64
-            .zattrs: {telemetry_row_count, frame_height, frame_width,
+            zarr.json attributes: {telemetry_row_count, frame_height, frame_width,
                       camera_index, camera_label, timestamp_kind}
                      telemetry_row_count is signed: where the R rows sat in the raw
                      frame (positive = top, negative = bottom).
 
-Arrays are created without an explicit `compressor=`, so they use zarr's own default
-(`zarr.storage.default_compressor`; Blosc lz4 level 5 with byte-shuffle in zarr 2.x).
+Arrays use Blosc lz4 level 5 with byte-shuffle -- what the zarr 2 default was, so
+v2 and v3 stores compress alike. `schema_version` is this layout's version and is
+independent of the zarr format version.
 
-All zarr access in the app goes through this module so a future v2->v3
-migration, or a different chunking/codec policy, is a contained change.
+All zarr access in the app goes through this module so a different
+chunking/codec policy is a contained change.
 """
 
 from pathlib import Path
 
 import numpy as np
 import zarr
+from zarr.codecs import BloscCodec
 
 from thermal_dataset_manager.ingest.types import NormalizedCameraCapture
 
 # v2: telemetry rows are stripped out of `counts` into a separate `telemetry` array.
 SCHEMA_VERSION = 2
+
+_ZARR_FORMAT = 3
+_COMPRESSOR = BloscCodec(cname="lz4", clevel=5, shuffle="shuffle")
 
 
 def compute_time_chunk_size(frame_height: int, frame_width: int, target_bytes: int) -> int:
@@ -48,8 +54,7 @@ def write(
     target_chunk_bytes: int,
 ) -> None:
     store_path.parent.mkdir(parents=True, exist_ok=True)
-    store = zarr.DirectoryStore(str(store_path))
-    root = zarr.group(store=store, overwrite=True)
+    root = zarr.open_group(store_path, mode="w", zarr_format=_ZARR_FORMAT)
     root.attrs["schema_version"] = SCHEMA_VERSION
     root.attrs["source_format"] = source_format
     root.attrs["camera_count"] = len(cameras)
@@ -66,31 +71,30 @@ def write(
         cam_group.attrs["frame_width"] = w
         cam_group.attrs["timestamp_kind"] = cam.timestamp_kind
 
-        cam_group.create_dataset(
+        cam_group.create_array(
             "counts",
             data=cam.frames,
             chunks=(chunk_frames, h, w),
-            dtype="uint16",
+            compressors=_COMPRESSOR,
         )
         n_telemetry_rows = cam.telemetry.shape[1]
         if n_telemetry_rows > 0:
-            cam_group.create_dataset(
+            cam_group.create_array(
                 "telemetry",
                 data=cam.telemetry,
                 chunks=(compute_time_chunk_size(n_telemetry_rows, w, target_chunk_bytes), n_telemetry_rows, w),
-                dtype="uint16",
+                compressors=_COMPRESSOR,
             )
-        cam_group.create_dataset(
+        cam_group.create_array(
             "timestamps",
             data=cam.timestamps.astype("float64"),
             chunks=(n_frames,),
-            dtype="float64",
+            compressors=_COMPRESSOR,
         )
 
 
-def open_group(store_path: Path) -> zarr.hierarchy.Group:
-    store = zarr.DirectoryStore(str(store_path))
-    root = zarr.open_group(store=store, mode="r")
+def open_group(store_path: Path) -> zarr.Group:
+    root = zarr.open_group(store_path, mode="r")  # zarr format 2 or 3, detected from the store
     version = root.attrs.get("schema_version", 1)
     if version != SCHEMA_VERSION:
         raise ValueError(

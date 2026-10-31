@@ -61,10 +61,37 @@ def test_open_group_rejects_old_schema(tmp_path):
     cam = _capture(0, n_frames=3, h=12, w=16)
     store_path = tmp_path / "raw.zarr"
     zarr_store.write(store_path, [cam], "npz", target_chunk_bytes=1024 * 1024)
-    root = zarr.open_group(store=zarr.DirectoryStore(str(store_path)), mode="a")
+    root = zarr.open_group(store_path, mode="a")
     root.attrs["schema_version"] = 1
     with pytest.raises(ValueError, match="re-ingest"):
         zarr_store.open_group(store_path)
+
+
+def test_new_stores_are_zarr_format_3(tmp_path):
+    store_path = tmp_path / "raw.zarr"
+    zarr_store.write(store_path, [_capture(0, n_frames=4, h=12, w=16)], "npz", target_chunk_bytes=1024 * 1024)
+
+    assert zarr.open_group(store_path, mode="r").metadata.zarr_format == 3
+    assert (store_path / "zarr.json").exists() and not (store_path / ".zgroup").exists()
+
+
+def test_zarr_format_2_stores_are_still_read(tmp_path):
+    """Datasets ingested before the move to zarr 3 keep working, without a rewrite."""
+    cam = _capture(0, n_frames=6, h=12, w=16)
+    store_path = tmp_path / "raw.zarr"
+    root = zarr.open_group(store_path, mode="w", zarr_format=2)
+    root.attrs.update({"schema_version": zarr_store.SCHEMA_VERSION, "source_format": "npz", "camera_count": 1})
+    group = root.create_group("camera_0")
+    group.attrs.update({"telemetry_row_count": 2})
+    group.create_array("counts", data=cam.frames, chunks=(4, 10, 16))
+    group.create_array("telemetry", data=cam.telemetry, chunks=(4, 2, 16))
+    group.create_array("timestamps", data=cam.timestamps, chunks=(6,))
+
+    assert zarr.open_group(store_path, mode="r").metadata.zarr_format == 2
+    assert zarr_store.camera_indices(store_path) == [0]
+    np.testing.assert_array_equal(zarr_store.read_frame_image(store_path, 0, 5), cam.frames[5])
+    np.testing.assert_array_equal(zarr_store.read_frame_telemetry(store_path, 0, 5), cam.telemetry[5])
+    np.testing.assert_allclose(zarr_store.read_timestamps(store_path, 0), cam.timestamps)
 
 
 def test_multi_camera_round_trip(tmp_path):

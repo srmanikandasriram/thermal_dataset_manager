@@ -3,15 +3,15 @@ name = "thermal-dataset-manager"
 version = "0.1.0"
 description = "Lightweight browser-based app to organize, browse, and manage raw thermal video captures"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
 # Core: just what `thermal_dataset_manager.loader` needs to query and load
 # videos, so other projects can depend on it without the server/ingest stack.
 dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.5",
     "sqlmodel>=0.0.22",
-    "zarr>=2.18,<3.0",
-    "numcodecs>=0.13",
+    "zarr>=3.0,<4",
+    "numcodecs>=0.15",
     "numpy>=1.26",
 ]
 

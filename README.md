@@ -17,7 +17,7 @@ changed afterward.
 
 ## Setup
 
-Requires Python >= 3.10 and Node >= 18.
+Requires Python >= 3.11 (zarr 3) and Node >= 18.
 
 ```bash
 python3 -m venv .venv
@@ -140,7 +140,10 @@ pytest backend/tests
 
 ## Loading videos for downstream processing
 
-Other projects only need the core install (numpy, zarr, SQLAlchemy/pydantic; no server or ingest stack):
+New datasets are written as zarr format 3. Datasets ingested earlier are zarr format 2; zarr 3 reads
+them as they are, so nothing needs rewriting (re-ingest a video only if you want it in the v3 layout).
+
+Other projects only need the core install (numpy, zarr >= 3, SQLAlchemy/pydantic; no server or ingest stack):
 
 ```bash
 pip install "thermal-dataset-manager @ /path/to/this/repo"      # query + load

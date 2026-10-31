@@ -214,7 +214,7 @@ _REAL_ZARR = os.environ.get("THERMAL_TELEMETRY_TEST_ZARR")
 def test_real_dataset_telemetry_is_consistent():
     import zarr
 
-    root = zarr.open_group(store=zarr.DirectoryStore(_REAL_ZARR), mode="r")
+    root = zarr.open_group(_REAL_ZARR, mode="r")
     cam = root["camera_0"]
     trc = int(cam.attrs["telemetry_row_count"])
     counts = cam["counts"]
