@@ -47,6 +47,18 @@ def compute_time_chunk_size(frame_height: int, frame_width: int, target_bytes: i
     return max(1, target_bytes // bytes_per_frame)
 
 
+# Source arrays can be memory-mapped captures larger than RAM, so they are
+# copied into the store a few chunks at a time rather than handed over whole.
+_WRITE_BLOCK_CHUNKS = 4
+
+
+def _create_array(group: zarr.Group, name: str, data: np.ndarray, chunks: tuple[int, ...]) -> None:
+    array = group.create_array(name, shape=data.shape, dtype=data.dtype, chunks=chunks, compressors=_COMPRESSOR)
+    block = chunks[0] * _WRITE_BLOCK_CHUNKS
+    for start in range(0, data.shape[0], block):
+        array[start : start + block] = np.ascontiguousarray(data[start : start + block])
+
+
 def write(
     store_path: Path,
     cameras: list[NormalizedCameraCapture],
@@ -71,20 +83,11 @@ def write(
         cam_group.attrs["frame_width"] = w
         cam_group.attrs["timestamp_kind"] = cam.timestamp_kind
 
-        cam_group.create_array(
-            "counts",
-            data=cam.frames,
-            chunks=(chunk_frames, h, w),
-            compressors=_COMPRESSOR,
-        )
+        _create_array(cam_group, "counts", cam.frames, (chunk_frames, h, w))
         n_telemetry_rows = cam.telemetry.shape[1]
         if n_telemetry_rows > 0:
-            cam_group.create_array(
-                "telemetry",
-                data=cam.telemetry,
-                chunks=(compute_time_chunk_size(n_telemetry_rows, w, target_chunk_bytes), n_telemetry_rows, w),
-                compressors=_COMPRESSOR,
-            )
+            telemetry_chunk_frames = compute_time_chunk_size(n_telemetry_rows, w, target_chunk_bytes)
+            _create_array(cam_group, "telemetry", cam.telemetry, (telemetry_chunk_frames, n_telemetry_rows, w))
         cam_group.create_array(
             "timestamps",
             data=cam.timestamps.astype("float64"),

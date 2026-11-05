@@ -430,3 +430,40 @@ def test_stored_hash_matches_hash_computed_at_ingest(tmp_path, storage, db_sessi
         group["counts"], group["telemetry"] if trc else None, cam.telemetry_row_count
     )
     assert stored == cam.content_sha256
+
+
+def test_large_uncompressed_arrays_are_memory_mapped_and_ingest_identically(tmp_path, storage, db_session, monkeypatch):
+    """Arrays over the threshold are mapped from the archive instead of read, so
+    a capture larger than RAM can be ingested; the stored result is the same."""
+    from thermal_dataset_manager.ingest.readers import npz_reader
+
+    src = tmp_path / "big.npz"
+    frames = np.random.default_rng(3).integers(0, 60000, size=(9, 12, 16, 1), dtype=np.uint16)
+    ts = 1_700_000_000.0 + np.arange(9) / 30.0
+    np.savez(src, raw_thr_frames=frames, raw_thr_tstamps=ts)
+
+    with npz_reader.NpzSource(src) as source:
+        assert not isinstance(source.read("raw_thr_frames"), np.memmap)  # below the default threshold
+
+    monkeypatch.setattr(npz_reader, "_MEMMAP_MIN_BYTES", 0)
+    with npz_reader.NpzSource(src) as source:
+        mapped = source.read("raw_thr_frames")
+        assert isinstance(mapped, np.memmap)
+        np.testing.assert_array_equal(mapped, frames)
+
+    [metadata] = ingest_dataset(src, storage, db_session, **INGEST_KWARGS)
+    stored = zarr_store.open_group(storage.zarr_store_path(metadata.auto.dataset_id))["camera_0"]
+    np.testing.assert_array_equal(stored["counts"][:], frames[:, TELEMETRY_ROWS:, :, 0])
+    np.testing.assert_array_equal(stored["telemetry"][:], frames[:, :TELEMETRY_ROWS, :, 0])
+
+
+def test_compressed_archives_are_read_not_memory_mapped(tmp_path, monkeypatch):
+    from thermal_dataset_manager.ingest.readers import npz_reader
+
+    monkeypatch.setattr(npz_reader, "_MEMMAP_MIN_BYTES", 0)
+    src = tmp_path / "small.npz"
+    np.savez_compressed(src, a=np.arange(10, dtype=np.uint16))
+    with npz_reader.NpzSource(src) as source:
+        out = source.read("a")
+    assert not isinstance(out, np.memmap)
+    np.testing.assert_array_equal(out, np.arange(10))
